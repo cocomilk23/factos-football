@@ -7,12 +7,24 @@ const STRIKE_CENTER = Vector2(640.0, 525.0)
 const PERFECT_RADIUS = 34.0
 const HIT_RADIUS = 106.0
 const DANGER_Y = 578.0
+const ENEMY_SPAWN_Y = 132.0
 const FEED_DURATION = 1.18
 const MAX_CHARGE = 1.25
 const MAX_LIVES = 3
+const WAVE_COUNT = 15
 
 var rng = RandomNumberGenerator.new()
 var font: Font
+var tex_field: Texture2D
+var tex_player: Texture2D
+var tex_launcher: Texture2D
+var tex_ball: Texture2D
+var tex_curve: Texture2D
+var tex_heart: Texture2D
+var tex_electric: Texture2D
+var tex_target: Texture2D
+var tex_fireball: Texture2D
+var enemy_textures: Array = []
 
 var elapsed = 0.0
 var score = 0
@@ -43,8 +55,27 @@ var feedback_timer = 0.0
 func _ready() -> void:
 	rng.randomize()
 	font = ThemeDB.fallback_font
+	load_assets()
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	restart_game()
+
+
+func load_assets() -> void:
+	tex_field = load("res://assets/img/stadium_field.png")
+	tex_player = load("res://assets/img/player_volley.png")
+	tex_launcher = load("res://assets/img/launcher.png")
+	tex_ball = load("res://assets/img/ball_projectile.png")
+	tex_curve = load("res://assets/img/curve_slash.png")
+	tex_heart = load("res://assets/img/heart_icon.png")
+	tex_electric = load("res://assets/img/electric_icon.png")
+	tex_target = load("res://assets/img/target_icon.png")
+	tex_fireball = load("res://assets/img/fireball_icon.png")
+	enemy_textures = [
+		load("res://assets/img/enemy_0.png"),
+		load("res://assets/img/enemy_1.png"),
+		load("res://assets/img/enemy_2.png"),
+		load("res://assets/img/enemy_3.png")
+	]
 
 
 func restart_game() -> void:
@@ -288,7 +319,7 @@ func spawn_enemy(offset_index: int, burst_count: int) -> void:
 		base_x += (float(offset_index) - (burst_count - 1.0) * 0.5) * 96.0
 	var enemy = {
 		"id": next_enemy_id,
-		"pos": Vector2(clamp(base_x, 80.0, SCREEN_SIZE.x - 80.0), -38.0 - offset_index * 30.0),
+		"pos": Vector2(clamp(base_x, 80.0, SCREEN_SIZE.x - 80.0), ENEMY_SPAWN_Y + offset_index * 34.0),
 		"speed": rng.randf_range(48.0, 70.0) + min(elapsed * 0.65, 52.0),
 		"radius": rng.randf_range(23.0, 29.0),
 		"phase": rng.randf_range(0.0, TAU),
@@ -410,6 +441,30 @@ func quadratic_bezier(a: Vector2, b: Vector2, c: Vector2, t: float) -> Vector2:
 	return ab.lerp(bc, t)
 
 
+func draw_tex_center(tex: Texture2D, center: Vector2, size: Vector2, color: Color = Color.WHITE) -> void:
+	if tex == null:
+		return
+	draw_texture_rect(tex, Rect2(center - size * 0.5, size), false, color)
+
+
+func draw_text_shadow(pos: Vector2, text: String, size: int, color: Color, shadow: Color = Color(0, 0, 0, 0.8)) -> void:
+	draw_string(font, pos + Vector2(3.0, 4.0), text, HORIZONTAL_ALIGNMENT_LEFT, -1, size, shadow)
+	draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, size, color)
+
+
+func draw_panel(rect: Rect2, fill: Color = Color(0.0, 0.0, 0.0, 0.72), border: Color = Color(1.0, 1.0, 1.0, 0.18)) -> void:
+	draw_rect(rect, fill, true)
+	draw_rect(rect, border, false, 3.0)
+
+
+func draw_ellipse_shadow(center: Vector2, size: Vector2, color: Color) -> void:
+	var points = PackedVector2Array()
+	for i in range(32):
+		var a = float(i) / 32.0 * TAU
+		points.append(center + Vector2(cos(a) * size.x * 0.5, sin(a) * size.y * 0.5))
+	draw_colored_polygon(points, color)
+
+
 func _draw() -> void:
 	var offset = Vector2.ZERO
 	if shake_time > 0.0:
@@ -427,19 +482,15 @@ func _draw() -> void:
 
 
 func draw_field() -> void:
-	draw_rect(Rect2(Vector2.ZERO, SCREEN_SIZE), Color(0.05, 0.38, 0.19))
-	for i in range(8):
-		var shade = 0.05 if i % 2 == 0 else 0.0
-		draw_rect(Rect2(Vector2(0.0, i * 90.0), Vector2(SCREEN_SIZE.x, 90.0)), Color(0.05 + shade, 0.42 + shade, 0.2 + shade))
-	for x in [160.0, 360.0, 560.0, 760.0, 960.0, 1160.0]:
-		draw_line(Vector2(x, 80.0), Vector2(x, DANGER_Y), Color(1.0, 1.0, 1.0, 0.08), 2.0)
-	draw_line(Vector2(80.0, 120.0), Vector2(1200.0, 120.0), Color(1.0, 1.0, 1.0, 0.18), 3.0)
-	draw_arc(Vector2(640.0, 118.0), 170.0, 0.0, PI, 64, Color(1.0, 1.0, 1.0, 0.16), 3.0)
-	draw_rect(Rect2(Vector2(450.0, 26.0), Vector2(380.0, 76.0)), Color(0.1, 0.18, 0.2, 0.5), false, 5.0)
-	draw_line(Vector2(450.0, 102.0), Vector2(830.0, 102.0), Color(0.96, 0.96, 0.9, 0.75), 5.0)
-	for i in range(0, 32):
-		var x = float(i) * 44.0
-		draw_line(Vector2(x, DANGER_Y), Vector2(x + 22.0, DANGER_Y), Color(1.0, 0.3, 0.22, 0.55), 3.0)
+	if tex_field != null:
+		draw_texture_rect(tex_field, Rect2(Vector2.ZERO, SCREEN_SIZE), false)
+	else:
+		draw_rect(Rect2(Vector2.ZERO, SCREEN_SIZE), Color(0.05, 0.38, 0.19))
+	draw_rect(Rect2(Vector2.ZERO, Vector2(SCREEN_SIZE.x, 96.0)), Color(0.0, 0.0, 0.0, 0.18), true)
+	draw_rect(Rect2(Vector2(0.0, 575.0), Vector2(SCREEN_SIZE.x, 145.0)), Color(0.0, 0.0, 0.0, 0.08), true)
+	for i in range(0, 28):
+		var x = float(i) * 48.0
+		draw_line(Vector2(x, DANGER_Y), Vector2(x + 24.0, DANGER_Y), Color(1.0, 0.22, 0.16, 0.55), 3.0)
 
 
 func draw_strike_zone() -> void:
@@ -455,32 +506,24 @@ func draw_strike_zone() -> void:
 
 
 func draw_launcher() -> void:
-	var base = Rect2(LAUNCHER_POS + Vector2(-65.0, -18.0), Vector2(130.0, 54.0))
-	draw_rect(base, Color(0.15, 0.19, 0.24), true)
-	draw_rect(base, Color(0.72, 0.82, 0.88), false, 3.0)
-	draw_rect(Rect2(LAUNCHER_POS + Vector2(-28.0, -58.0), Vector2(56.0, 46.0)), Color(0.22, 0.28, 0.35), true)
-	draw_circle(LAUNCHER_POS + Vector2(-43.0, 38.0), 13.0, Color(0.05, 0.06, 0.07))
-	draw_circle(LAUNCHER_POS + Vector2(43.0, 38.0), 13.0, Color(0.05, 0.06, 0.07))
-	draw_line(LAUNCHER_POS + Vector2(0.0, -55.0), STRIKE_CENTER + Vector2(0.0, 35.0), Color(0.75, 0.86, 0.9), 9.0)
-	draw_string(font, LAUNCHER_POS + Vector2(-52.0, 78.0), "FEEDER", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(0.9, 0.96, 1.0, 0.85))
+	var center = Vector2(720.0, 634.0)
+	draw_ellipse_shadow(center + Vector2(0.0, 62.0), Vector2(130.0, 28.0), Color(0, 0, 0, 0.35))
+	if tex_launcher != null:
+		draw_tex_center(tex_launcher, center, Vector2(160.0, 150.0))
+	else:
+		draw_rect(Rect2(center - Vector2(65.0, 40.0), Vector2(130.0, 80.0)), Color(0.15, 0.19, 0.24), true)
+	draw_circle(center + Vector2(0.0, 18.0), 10.0 + sin(elapsed * 8.0) * 2.0, Color(1.0, 0.58, 0.08, 0.7))
 
 
 func draw_player() -> void:
 	var charge_pose = clamp(charge / MAX_CHARGE, 0.0, 1.0) if is_charging else 0.0
 	var kick_pose = player_anim / 0.34
-	var body_color = Color(0.12, 0.35, 0.98)
-	var skin = Color(0.95, 0.72, 0.48)
-	draw_circle(PLAYER_POS + Vector2(0.0, -116.0), 22.0, skin)
-	draw_rect(Rect2(PLAYER_POS + Vector2(-29.0, -94.0), Vector2(58.0, 72.0)), body_color, true)
-	draw_rect(Rect2(PLAYER_POS + Vector2(-31.0, -96.0), Vector2(62.0, 76.0)), Color(1.0, 1.0, 1.0, 0.65), false, 3.0)
-	draw_string(font, PLAYER_POS + Vector2(-9.0, -47.0), "9", HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color.WHITE)
-	draw_line(PLAYER_POS + Vector2(-24.0, -22.0), PLAYER_POS + Vector2(-38.0, 22.0), Color(0.08, 0.12, 0.18), 12.0)
-	draw_line(PLAYER_POS + Vector2(24.0, -22.0), PLAYER_POS + Vector2(38.0, 22.0), Color(0.08, 0.12, 0.18), 12.0)
-	var leg_swing = -42.0 - charge_pose * 24.0 + kick_pose * 96.0
-	draw_line(PLAYER_POS + Vector2(-12.0, -20.0), PLAYER_POS + Vector2(-48.0, 44.0), Color(0.09, 0.13, 0.19), 13.0)
-	draw_line(PLAYER_POS + Vector2(14.0, -20.0), PLAYER_POS + Vector2(leg_swing, 28.0 - kick_pose * 32.0), Color(0.09, 0.13, 0.19), 14.0)
-	draw_line(PLAYER_POS + Vector2(-35.0, -78.0), PLAYER_POS + Vector2(-58.0, -38.0), body_color, 10.0)
-	draw_line(PLAYER_POS + Vector2(35.0, -78.0), PLAYER_POS + Vector2(58.0, -38.0), body_color, 10.0)
+	var center = Vector2(505.0, 582.0) + Vector2(-charge_pose * 7.0 + kick_pose * 12.0, -kick_pose * 8.0)
+	draw_ellipse_shadow(center + Vector2(16.0, 130.0), Vector2(128.0, 28.0), Color(0, 0, 0, 0.34))
+	if tex_player != null:
+		draw_tex_center(tex_player, center, Vector2(210.0, 292.0))
+	else:
+		draw_circle(PLAYER_POS + Vector2(0.0, -116.0), 22.0, Color(0.95, 0.72, 0.48))
 
 
 func draw_enemies() -> void:
@@ -488,11 +531,17 @@ func draw_enemies() -> void:
 		var pos = Vector2(enemy["pos"])
 		var r = float(enemy["radius"])
 		var wobble = sin(float(enemy["wobble"]) * 7.0) * 3.0
-		draw_circle(pos + Vector2(0.0, wobble), r, Color(0.78, 0.18, 0.22))
-		draw_circle(pos + Vector2(-8.0, -5.0 + wobble), 5.0, Color(1.0, 0.95, 0.72))
-		draw_circle(pos + Vector2(8.0, -5.0 + wobble), 5.0, Color(1.0, 0.95, 0.72))
-		draw_rect(Rect2(pos + Vector2(-r * 0.72, r * 0.18 + wobble), Vector2(r * 1.44, 9.0)), Color(0.25, 0.04, 0.06), true)
-		draw_line(pos + Vector2(-r, r * 0.9 + wobble), pos + Vector2(r, r * 0.9 + wobble), Color(0.95, 0.45, 0.28), 5.0)
+		var tex = enemy_textures[int(enemy["id"]) % enemy_textures.size()] if enemy_textures.size() > 0 else null
+		var visual_size = Vector2(r * 3.3, r * 3.55)
+		draw_ellipse_shadow(pos + Vector2(0.0, r * 1.28), Vector2(r * 2.1, r * 0.44), Color(0, 0, 0, 0.25))
+		if tex != null:
+			draw_tex_center(tex, pos + Vector2(0.0, wobble), visual_size)
+		else:
+			draw_circle(pos + Vector2(0.0, wobble), r, Color(0.78, 0.18, 0.22))
+		var bar_w = r * 2.2
+		var bar_pos = pos + Vector2(-bar_w * 0.5, -r * 2.0 + wobble)
+		draw_rect(Rect2(bar_pos, Vector2(bar_w, 6.0)), Color(0.05, 0.05, 0.06, 0.9), true)
+		draw_rect(Rect2(bar_pos, Vector2(bar_w * 0.78, 6.0)), Color(1.0, 0.18, 0.15, 0.95), true)
 
 
 func draw_balls() -> void:
@@ -505,18 +554,22 @@ func draw_balls() -> void:
 			var points = PackedVector2Array()
 			for p in trail:
 				points.append(Vector2(p))
-			draw_polyline(points, Color(0.75, 0.93, 1.0, 0.5), 5.0, true)
+			draw_polyline(points, Color(1.0, 0.92, 0.2, 0.6), 9.0, true)
+			draw_polyline(points, Color(1.0, 1.0, 0.75, 0.9), 3.0, true)
 		draw_football(Vector2(ball["pos"]), float(ball["radius"]), float(ball["spin"]), Color(1.0, 1.0, 1.0))
 
 
 func draw_football(pos: Vector2, radius: float, spin: float, tint: Color) -> void:
-	draw_circle(pos, radius, tint)
-	draw_circle(pos, radius, Color(0.04, 0.05, 0.06), false, 2.0)
-	for i in range(5):
-		var a = spin + float(i) * TAU / 5.0
-		var p = pos + Vector2(cos(a), sin(a)) * radius * 0.45
-		draw_circle(p, radius * 0.18, Color(0.04, 0.05, 0.06))
-	draw_arc(pos, radius * 0.68, spin, spin + PI, 20, Color(0.04, 0.05, 0.06, 0.75), 2.0, true)
+	if tex_ball != null:
+		draw_tex_center(tex_ball, pos, Vector2(radius * 2.65, radius * 2.65), tint)
+	else:
+		draw_circle(pos, radius, tint)
+		draw_circle(pos, radius, Color(0.04, 0.05, 0.06), false, 2.0)
+		for i in range(5):
+			var a = spin + float(i) * TAU / 5.0
+			var p = pos + Vector2(cos(a), sin(a)) * radius * 0.45
+			draw_circle(p, radius * 0.18, Color(0.04, 0.05, 0.06))
+		draw_arc(pos, radius * 0.68, spin, spin + PI, 20, Color(0.04, 0.05, 0.06, 0.75), 2.0, true)
 
 
 func draw_effects_layer() -> void:
@@ -532,16 +585,41 @@ func draw_effects_layer() -> void:
 
 
 func draw_ui() -> void:
-	draw_rect(Rect2(Vector2.ZERO, Vector2(SCREEN_SIZE.x, 64.0)), Color(0.02, 0.04, 0.06, 0.58), true)
-	draw_string(font, Vector2(30.0, 42.0), "Score  " + str(score), HORIZONTAL_ALIGNMENT_LEFT, -1, 28, Color.WHITE)
-	draw_string(font, Vector2(222.0, 42.0), "Lives  " + str(lives), HORIZONTAL_ALIGNMENT_LEFT, -1, 28, Color(1.0, 0.42, 0.38))
-	draw_string(font, Vector2(382.0, 42.0), "Combo  x" + str(max(combo, 1)), HORIZONTAL_ALIGNMENT_LEFT, -1, 28, Color(1.0, 0.9, 0.32))
+	draw_panel(Rect2(Vector2(18.0, 16.0), Vector2(230.0, 90.0)), Color(0, 0, 0, 0.74))
+	draw_text_shadow(Vector2(34.0, 42.0), "SCORE", 22, Color.WHITE)
+	draw_text_shadow(Vector2(34.0, 92.0), str(score), 46, Color(1.0, 0.88, 0.1))
+
+	var wave = min(WAVE_COUNT, max(1, int(elapsed / 22.0) + 1))
+	var wave_progress = clamp(float(wave) / float(WAVE_COUNT), 0.0, 1.0)
+	draw_panel(Rect2(Vector2(494.0, 18.0), Vector2(292.0, 40.0)), Color(0, 0, 0, 0.72))
+	draw_text_shadow(Vector2(572.0, 48.0), "WAVE " + str(wave) + " / " + str(WAVE_COUNT), 22, Color.WHITE)
+	var wave_bar = Rect2(Vector2(470.0, 72.0), Vector2(340.0, 20.0))
+	draw_rect(wave_bar, Color(0.03, 0.04, 0.05, 0.9), true)
+	draw_rect(Rect2(wave_bar.position, Vector2(wave_bar.size.x * wave_progress, wave_bar.size.y)), Color(0.05, 0.86, 0.22, 0.95), true)
+	draw_rect(wave_bar, Color(1, 1, 1, 0.35), false, 2.0)
+	draw_football(wave_bar.position + Vector2(wave_bar.size.x * wave_progress, 10.0), 15.0, elapsed * 4.0, Color.WHITE)
+
+	draw_panel(Rect2(Vector2(1030.0, 16.0), Vector2(224.0, 86.0)), Color(0, 0, 0, 0.74))
+	draw_text_shadow(Vector2(1050.0, 42.0), "LIVES", 22, Color.WHITE)
+	for i in range(MAX_LIVES):
+		var c = Color.WHITE if i < lives else Color(0.18, 0.18, 0.18, 0.55)
+		draw_tex_center(tex_heart, Vector2(1072.0 + i * 58.0, 75.0), Vector2(46.0, 46.0), c)
 
 	var power = clamp(charge / MAX_CHARGE, 0.0, 1.0)
-	draw_rect(Rect2(Vector2(910.0, 22.0), Vector2(250.0, 18.0)), Color(0.05, 0.08, 0.1), true)
-	draw_rect(Rect2(Vector2(910.0, 22.0), Vector2(250.0 * power, 18.0)), Color(0.25, 0.78, 1.0), true)
-	draw_rect(Rect2(Vector2(910.0, 22.0), Vector2(250.0, 18.0)), Color(0.82, 0.94, 1.0), false, 2.0)
-	draw_string(font, Vector2(910.0, 58.0), "Hold Space / Left Mouse, release in the circle", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(0.9, 0.96, 1.0, 0.8))
+	draw_text_shadow(Vector2(28.0, 663.0), "POWER", 28, Color.WHITE)
+	var p_rect = Rect2(Vector2(30.0, 675.0), Vector2(295.0, 24.0))
+	draw_rect(p_rect, Color(0.02, 0.03, 0.04, 0.9), true)
+	draw_rect(Rect2(p_rect.position + Vector2(4.0, 4.0), Vector2((p_rect.size.x - 8.0) * power, p_rect.size.y - 8.0)), Color(0.15 + power * 0.85, 0.9 - power * 0.25, 0.15, 0.95), true)
+	draw_rect(p_rect, Color(1, 1, 1, 0.45), false, 3.0)
+	draw_panel(Rect2(Vector2(342.0, 662.0), Vector2(44.0, 44.0)), Color(0.08, 0.08, 0.09, 0.9))
+	draw_text_shadow(Vector2(357.0, 694.0), "E", 25, Color.WHITE)
+
+	draw_panel(Rect2(Vector2(1010.0, 648.0), Vector2(70.0, 62.0)), Color(0.02, 0.03, 0.05, 0.72))
+	draw_panel(Rect2(Vector2(1092.0, 648.0), Vector2(70.0, 62.0)), Color(0.02, 0.03, 0.05, 0.72))
+	draw_panel(Rect2(Vector2(1174.0, 648.0), Vector2(70.0, 62.0)), Color(0.02, 0.03, 0.05, 0.72))
+	draw_tex_center(tex_electric, Vector2(1045.0, 679.0), Vector2(52.0, 52.0))
+	draw_tex_center(tex_target, Vector2(1127.0, 679.0), Vector2(52.0, 52.0))
+	draw_tex_center(tex_fireball, Vector2(1209.0, 679.0), Vector2(52.0, 52.0))
 
 	var mouse = get_global_mouse_position()
 	var aim_x = clamp((mouse.x - SCREEN_SIZE.x * 0.5) / (SCREEN_SIZE.x * 0.5), -1.0, 1.0)
@@ -550,7 +628,8 @@ func draw_ui() -> void:
 	draw_circle(aim_end, 7.0, Color(0.7, 0.95, 1.0, 0.72))
 
 	if feedback_timer > 0.0:
-		draw_string(font, Vector2(535.0, 98.0), last_feedback, HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color(1.0, 1.0, 1.0, min(feedback_timer, 1.0)))
+		var fb_color = Color(1.0, 0.9, 0.1, min(feedback_timer, 1.0))
+		draw_text_shadow(Vector2(932.0, 180.0), last_feedback, 30, fb_color)
 
 	if game_over:
 		draw_rect(Rect2(Vector2.ZERO, SCREEN_SIZE), Color(0.0, 0.0, 0.0, 0.62), true)

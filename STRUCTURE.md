@@ -21,7 +21,7 @@ Mouse:
 - **File:** `res://scenes/main.tscn`
 - **Root type:** `Node2D`
 - **Script:** `res://scripts/Main.gd`
-- **Responsibilities:** Owns game state, procedural drawing, input, ball feeding, volley shots, enemies, scoring, UI, and restart.
+- **Responsibilities:** Owns game state, image-backed drawing, input, ball feeding, volley shots, enemies, scoring, UI, and restart.
 
 ## Scripts
 
@@ -32,11 +32,10 @@ Mouse:
 
 ## Asset Hints
 
-- Future player sprite: footballer in striking stance, about 110x150 px.
-- Future launcher sprite: compact football feeder machine, about 120x80 px.
-- Future enemy sprite: simple robot defender or target dummy, about 60x70 px.
-- Future ball sprite: football with strong spin readability, about 32x32 px.
-- Future field background: TV challenge show football field, 1280x720.
+- Runtime art is in `res://assets/img/`.
+- Original generated sheets are in `_meta/generated_sources/`.
+- `tools/process_generated_assets.py` crops and converts generated sheets into transparent runtime sprites.
+- Most animation and gameplay feedback still comes from code: ball trails, particles, shake, hit text, power bar, wave bar, and aim line.
 
 ## Build Order
 
