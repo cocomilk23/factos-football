@@ -1,29 +1,35 @@
-﻿extends Node2D
+extends Node2D
 
 const SCREEN_SIZE = Vector2(1280.0, 720.0)
-const PLAYER_POS = Vector2(640.0, 648.0)
-const LAUNCHER_POS = Vector2(640.0, 592.0)
-const STRIKE_CENTER = Vector2(640.0, 525.0)
-const PERFECT_RADIUS = 34.0
-const HIT_RADIUS = 106.0
-const DANGER_Y = 578.0
-const ENEMY_SPAWN_Y = 132.0
-const FEED_DURATION = 1.18
+const PLAYER_DRAW_CENTER = Vector2(466.0, 548.0)
+const LAUNCHER_DRAW_CENTER = Vector2(704.0, 632.0)
+const LAUNCHER_MOUTH = Vector2(704.0, 588.0)
+const STRIKE_CENTER = Vector2(624.0, 512.0)
+const PERFECT_RADIUS = 32.0
+const HIT_RADIUS = 104.0
+const DANGER_Y = 584.0
+const ENEMY_SPAWN_Y = 142.0
+const FEED_DURATION = 1.12
 const MAX_CHARGE = 1.25
 const MAX_LIVES = 3
 const WAVE_COUNT = 15
+const PLAYER_KICK_TIME = 0.52
+const MAX_FOCUS = 100.0
+const FOCUS_DURATION = 5.5
 
 var rng = RandomNumberGenerator.new()
 var font: Font
 var tex_field: Texture2D
-var tex_player: Texture2D
+var tex_player_frames: Array = []
 var tex_launcher: Texture2D
 var tex_ball: Texture2D
-var tex_curve: Texture2D
+var tex_curve_ball: Texture2D
+var tex_fire_ball: Texture2D
+var tex_perfect_impact: Texture2D
 var tex_heart: Texture2D
-var tex_electric: Texture2D
-var tex_target: Texture2D
-var tex_fireball: Texture2D
+var tex_curve_icon: Texture2D
+var tex_pierce_icon: Texture2D
+var tex_slow_icon: Texture2D
 var enemy_textures: Array = []
 
 var elapsed = 0.0
@@ -31,6 +37,9 @@ var score = 0
 var lives = MAX_LIVES
 var combo = 0
 var combo_timer = 0.0
+var perfect_streak = 0
+var focus = 0.0
+var focus_time = 0.0
 var game_over = false
 
 var feed_timer = 0.0
@@ -38,6 +47,7 @@ var active_ball = {}
 var shot_balls: Array = []
 var enemies: Array = []
 var particles: Array = []
+var impact_fx: Array = []
 var float_texts: Array = []
 
 var spawn_timer = 0.0
@@ -48,6 +58,7 @@ var shake_amount = 0.0
 var is_charging = false
 var charge = 0.0
 var player_anim = 0.0
+var kick_flash_timer = 0.0
 var last_feedback = ""
 var feedback_timer = 0.0
 
@@ -62,19 +73,28 @@ func _ready() -> void:
 
 func load_assets() -> void:
 	tex_field = load("res://assets/img/stadium_field.png")
-	tex_player = load("res://assets/img/player_volley.png")
 	tex_launcher = load("res://assets/img/launcher.png")
 	tex_ball = load("res://assets/img/ball_projectile.png")
-	tex_curve = load("res://assets/img/curve_slash.png")
+	tex_curve_ball = load("res://assets/img/curve_ball.png")
+	tex_fire_ball = load("res://assets/img/fireball_projectile.png")
+	tex_perfect_impact = load("res://assets/img/perfect_impact.png")
 	tex_heart = load("res://assets/img/heart_icon.png")
-	tex_electric = load("res://assets/img/electric_icon.png")
-	tex_target = load("res://assets/img/target_icon.png")
-	tex_fireball = load("res://assets/img/fireball_icon.png")
+	tex_curve_icon = load("res://assets/img/curve_icon.png")
+	tex_pierce_icon = load("res://assets/img/pierce_icon.png")
+	tex_slow_icon = load("res://assets/img/slow_icon.png")
+	tex_player_frames = [
+		load("res://assets/img/player_frame_0.png"),
+		load("res://assets/img/player_frame_1.png"),
+		load("res://assets/img/player_frame_2.png"),
+		load("res://assets/img/player_frame_3.png")
+	]
 	enemy_textures = [
 		load("res://assets/img/enemy_0.png"),
 		load("res://assets/img/enemy_1.png"),
 		load("res://assets/img/enemy_2.png"),
-		load("res://assets/img/enemy_3.png")
+		load("res://assets/img/enemy_3.png"),
+		load("res://assets/img/enemy_4.png"),
+		load("res://assets/img/enemy_5.png")
 	]
 
 
@@ -84,20 +104,25 @@ func restart_game() -> void:
 	lives = MAX_LIVES
 	combo = 0
 	combo_timer = 0.0
+	perfect_streak = 0
+	focus = 0.0
+	focus_time = 0.0
 	game_over = false
-	feed_timer = 0.35
-	spawn_timer = 0.75
+	feed_timer = 0.28
+	spawn_timer = 0.65
 	next_enemy_id = 1
 	active_ball.clear()
 	shot_balls.clear()
 	enemies.clear()
 	particles.clear()
+	impact_fx.clear()
 	float_texts.clear()
 	charge = 0.0
 	is_charging = false
 	player_anim = 0.0
+	kick_flash_timer = 0.0
 	last_feedback = "Time the feed ball"
-	feedback_timer = 3.2
+	feedback_timer = 2.6
 	shake_time = 0.0
 	shake_amount = 0.0
 	queue_redraw()
@@ -113,6 +138,14 @@ func _unhandled_input(event: InputEvent) -> void:
 			restart_game()
 		return
 
+	if event.is_action_pressed("skill"):
+		activate_focus()
+		return
+
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+		activate_focus()
+		return
+
 	if event.is_action_pressed("shoot"):
 		start_charge()
 	elif event.is_action_released("shoot"):
@@ -125,12 +158,21 @@ func _unhandled_input(event: InputEvent) -> void:
 			release_shot()
 
 
+func activate_focus() -> void:
+	if focus < MAX_FOCUS or focus_time > 0.0:
+		return
+	focus = 0.0
+	focus_time = FOCUS_DURATION
+	set_feedback("Focus Time!", Color(0.35, 0.95, 1.0))
+	spawn_burst(STRIKE_CENTER, Color(0.2, 0.95, 1.0), 28)
+	shake(0.12, 4.0)
+
+
 func start_charge() -> void:
 	if is_charging:
 		return
 	is_charging = true
 	charge = 0.0
-	player_anim = 0.25
 
 
 func release_shot() -> void:
@@ -152,7 +194,7 @@ func release_shot() -> void:
 			text = "Too Late"
 		register_miss(text)
 		active_ball.clear()
-		feed_timer = 0.55
+		feed_timer = 0.5
 		return
 
 	kick_active_ball(released_charge, quality)
@@ -168,9 +210,11 @@ func _process(delta: float) -> void:
 	if is_charging:
 		charge = min(charge + delta, MAX_CHARGE)
 	player_anim = max(player_anim - delta, 0.0)
+	kick_flash_timer = max(kick_flash_timer - delta, 0.0)
 	feedback_timer = max(feedback_timer - delta, 0.0)
 	shake_time = max(shake_time - delta, 0.0)
 	combo_timer = max(combo_timer - delta, 0.0)
+	focus_time = max(focus_time - delta, 0.0)
 	if combo_timer <= 0.0:
 		combo = 0
 
@@ -189,79 +233,111 @@ func update_feed(delta: float) -> void:
 		return
 
 	active_ball["t"] = float(active_ball["t"]) + delta / FEED_DURATION
+	active_ball["spin"] = float(active_ball.get("spin", 0.0)) + delta * 10.0
 	var t = float(active_ball["t"])
 	var side = float(active_ball["side"])
-	var end_pos = STRIKE_CENTER + Vector2(side * 24.0, 0.0)
+	var end_pos = STRIKE_CENTER + Vector2(side * 28.0, 0.0)
 
 	if t <= 1.0:
-		var a = LAUNCHER_POS
-		var b = LAUNCHER_POS + Vector2(side * 76.0, -156.0)
+		var a = LAUNCHER_MOUTH
+		var b = LAUNCHER_MOUTH + Vector2(side * 92.0, -156.0)
 		var c = end_pos
 		active_ball["pos"] = quadratic_bezier(a, b, c, t)
 	else:
 		var drift = t - 1.0
-		active_ball["pos"] = end_pos + Vector2(side * 92.0, 158.0) * drift
+		active_ball["pos"] = end_pos + Vector2(side * 98.0, 160.0) * drift
 
 	if t > 1.42:
 		active_ball.clear()
-		feed_timer = max(0.42, 1.08 - elapsed * 0.006 + rng.randf_range(-0.08, 0.12))
+		feed_timer = max(0.38, 0.98 - elapsed * 0.0055 + rng.randf_range(-0.08, 0.12))
 		set_feedback("Missed feed", Color(1.0, 0.72, 0.35))
 		combo = 0
+		perfect_streak = 0
 
 
 func spawn_feed_ball() -> void:
-	var side_options = [-1.0, -0.55, 0.0, 0.55, 1.0]
+	var side_options = [-1.0, -0.62, -0.24, 0.0, 0.24, 0.62, 1.0]
 	var side = side_options[rng.randi_range(0, side_options.size() - 1)]
 	active_ball = {
 		"t": 0.0,
 		"side": side,
-		"pos": LAUNCHER_POS,
+		"pos": LAUNCHER_MOUTH,
 		"spin": rng.randf_range(0.0, TAU)
 	}
 
 
 func kick_active_ball(released_charge: float, quality: float) -> void:
 	var power = clamp(released_charge / MAX_CHARGE, 0.12, 1.0)
-	var mouse = get_global_mouse_position()
-	var aim_x = clamp((mouse.x - SCREEN_SIZE.x * 0.5) / (SCREEN_SIZE.x * 0.5), -1.0, 1.0)
-	var direction = Vector2(aim_x * 0.78, -1.0).normalized()
+	var aim_x = get_aim_x()
+	var direction = Vector2(aim_x * 0.64, -1.0).normalized()
 
-	var timing_factor = lerp(0.74, 1.22, quality)
-	var speed = lerp(410.0, 900.0, power) * timing_factor
+	var timing_factor = lerp(0.74, 1.25, quality)
+	var speed = lerp(430.0, 940.0, power) * timing_factor
 	if quality < 0.45:
 		direction = direction.rotated(rng.randf_range(-0.22, 0.22))
 		speed *= 0.78
 
-	var curve_peak = 1.0 - clamp(abs(power - 0.55) / 0.55, 0.0, 1.0) * 0.55
-	var curve_accel = aim_x * lerp(180.0, 560.0, curve_peak) * lerp(0.72, 1.08, quality)
+	var curve_peak = 1.0 - clamp(abs(power - 0.58) / 0.58, 0.0, 1.0) * 0.5
+	var curve_accel = aim_x * lerp(760.0, 1900.0, curve_peak) * lerp(0.82, 1.22, quality)
+	if abs(aim_x) < 0.08:
+		curve_accel *= 0.25
+
+	var is_perfect = quality >= 0.82
+	var focus_boost = focus_time > 0.0
+	var kind = "normal"
+	if focus_boost:
+		kind = "fire"
+	elif abs(aim_x) >= 0.34:
+		kind = "curve"
+
+	var damage = 1.0
+	if is_perfect:
+		damage += 1.0
+	if focus_boost:
+		damage += 1.0
+
 	var ball = {
 		"pos": active_ball["pos"],
 		"vel": direction * speed,
 		"accel": Vector2(curve_accel, 0.0),
-		"life": 3.6,
-		"radius": 14.0,
+		"life": 3.8,
+		"age": 0.0,
+		"radius": 17.0 if focus_boost else 14.5,
 		"trail": [active_ball["pos"]],
 		"spin": float(active_ball.get("spin", 0.0)),
-		"hits": 0
+		"hits": 0,
+		"hit_ids": [],
+		"curve": aim_x,
+		"power": power,
+		"quality": quality,
+		"damage": damage,
+		"pierce_limit": 5 if focus_boost else 4 if is_perfect else 2,
+		"kind": kind
 	}
 	shot_balls.append(ball)
 
-	if quality >= 0.82:
-		set_feedback("Perfect Shot!", Color(0.35, 0.94, 1.0))
-		spawn_burst(Vector2(active_ball["pos"]), Color(0.35, 0.94, 1.0), 14)
+	if is_perfect:
+		perfect_streak += 1
+		focus = min(MAX_FOCUS, focus + 14.0 + perfect_streak * 3.0)
+		set_feedback("Perfect Shot x" + str(perfect_streak), Color(0.32, 0.95, 1.0))
+		spawn_burst(Vector2(active_ball["pos"]), Color(0.35, 0.94, 1.0), 18)
+		spawn_impact(Vector2(active_ball["pos"]), 86.0, Color(0.4, 0.95, 1.0))
 	elif quality >= 0.45:
 		set_feedback("Good Volley", Color(0.78, 1.0, 0.45))
 	else:
+		perfect_streak = 0
 		set_feedback("Scrappy Hit", Color(1.0, 0.75, 0.35))
 
 	active_ball.clear()
-	feed_timer = max(0.34, 1.0 - elapsed * 0.006 + rng.randf_range(-0.1, 0.12))
-	player_anim = 0.34
+	feed_timer = max(0.32, 0.92 - elapsed * 0.0055 + rng.randf_range(-0.1, 0.12))
+	player_anim = PLAYER_KICK_TIME
+	kick_flash_timer = 0.18
 
 
 func register_miss(text: String) -> void:
 	set_feedback(text, Color(1.0, 0.38, 0.32))
 	combo = 0
+	perfect_streak = 0
 	shake(0.08, 3.0)
 	if not active_ball.is_empty():
 		spawn_burst(Vector2(active_ball["pos"]), Color(1.0, 0.45, 0.28), 8)
@@ -282,21 +358,28 @@ func update_enemies(delta: float) -> void:
 	spawn_timer -= delta
 	if spawn_timer <= 0.0:
 		var burst_count = 1
-		if elapsed > 24.0 and rng.randf() < 0.28:
+		if elapsed > 22.0 and rng.randf() < 0.3:
 			burst_count = 2
-		if elapsed > 50.0 and rng.randf() < 0.18:
+		if elapsed > 48.0 and rng.randf() < 0.2:
 			burst_count = 3
 		for i in range(burst_count):
 			spawn_enemy(i, burst_count)
-		var interval = max(0.46, 1.42 - elapsed * 0.014)
-		spawn_timer = interval + rng.randf_range(-0.16, 0.14)
+		var interval = max(0.42, 1.34 - elapsed * 0.012)
+		spawn_timer = interval + rng.randf_range(-0.16, 0.12)
 
 	for i in range(enemies.size() - 1, -1, -1):
 		var enemy = enemies[i]
 		var pos = Vector2(enemy["pos"])
-		var speed = float(enemy["speed"]) + elapsed * 0.58
+		var speed = float(enemy["speed"]) + elapsed * 0.48
+		if focus_time > 0.0:
+			speed *= 0.52
 		pos.y += speed * delta
-		pos.x += sin(elapsed * 1.5 + float(enemy["phase"])) * 18.0 * delta
+		var type = int(enemy.get("type", 0))
+		var drift_scale = 18.0 + float(enemy.get("lane_drift", 0.0))
+		if type == 1 or type == 5:
+			drift_scale += 18.0
+		pos.x += sin(elapsed * float(enemy.get("drift_rate", 1.5)) + float(enemy["phase"])) * drift_scale * delta
+		pos.x = clamp(pos.x, 54.0, SCREEN_SIZE.x - 54.0)
 		enemy["pos"] = pos
 		enemy["wobble"] = float(enemy["wobble"]) + delta
 		enemies[i] = enemy
@@ -305,8 +388,9 @@ func update_enemies(delta: float) -> void:
 			enemies.remove_at(i)
 			lives -= 1
 			combo = 0
+			perfect_streak = 0
 			set_feedback("Defender broke through!", Color(1.0, 0.34, 0.25))
-			spawn_burst(pos, Color(1.0, 0.32, 0.23), 18)
+			spawn_burst(pos, Color(1.0, 0.32, 0.23), 20)
 			shake(0.22, 9.0)
 			if lives <= 0:
 				game_over = true
@@ -314,19 +398,57 @@ func update_enemies(delta: float) -> void:
 
 
 func spawn_enemy(offset_index: int, burst_count: int) -> void:
+	var type = choose_enemy_type()
+	var profile = enemy_profile(type)
 	var base_x = rng.randf_range(96.0, SCREEN_SIZE.x - 96.0)
 	if burst_count > 1:
-		base_x += (float(offset_index) - (burst_count - 1.0) * 0.5) * 96.0
+		base_x += (float(offset_index) - (burst_count - 1.0) * 0.5) * 112.0
 	var enemy = {
 		"id": next_enemy_id,
-		"pos": Vector2(clamp(base_x, 80.0, SCREEN_SIZE.x - 80.0), ENEMY_SPAWN_Y + offset_index * 34.0),
-		"speed": rng.randf_range(48.0, 70.0) + min(elapsed * 0.65, 52.0),
-		"radius": rng.randf_range(23.0, 29.0),
+		"type": type,
+		"pos": Vector2(clamp(base_x, 78.0, SCREEN_SIZE.x - 78.0), ENEMY_SPAWN_Y + offset_index * 34.0),
+		"speed": float(profile["speed"]) + min(elapsed * 0.52, 48.0),
+		"radius": float(profile["radius"]),
+		"hp": float(profile["hp"]),
+		"max_hp": float(profile["hp"]),
+		"score": int(profile["score"]),
 		"phase": rng.randf_range(0.0, TAU),
-		"wobble": 0.0
+		"wobble": 0.0,
+		"lane_drift": float(profile["lane_drift"]),
+		"drift_rate": rng.randf_range(1.1, 2.2)
 	}
 	enemies.append(enemy)
 	next_enemy_id += 1
+
+
+func choose_enemy_type() -> int:
+	var roll = rng.randf()
+	if elapsed > 18.0 and roll < 0.13:
+		return 1
+	if elapsed > 26.0 and roll < 0.26:
+		return 2
+	if elapsed > 42.0 and roll < 0.34:
+		return 3
+	if elapsed > 34.0 and roll < 0.46:
+		return 4
+	if elapsed > 16.0 and roll > 0.93:
+		return 5
+	return 0
+
+
+func enemy_profile(type: int) -> Dictionary:
+	match type:
+		1:
+			return {"hp": 1.0, "speed": 92.0, "radius": 23.0, "score": 130, "lane_drift": 18.0}
+		2:
+			return {"hp": 2.0, "speed": 48.0, "radius": 31.0, "score": 175, "lane_drift": 4.0}
+		3:
+			return {"hp": 3.0, "speed": 36.0, "radius": 35.0, "score": 250, "lane_drift": 2.0}
+		4:
+			return {"hp": 2.0, "speed": 56.0, "radius": 30.0, "score": 190, "lane_drift": 22.0}
+		5:
+			return {"hp": 1.0, "speed": 72.0, "radius": 27.0, "score": 330, "lane_drift": 35.0}
+	return {"hp": 1.0, "speed": 58.0, "radius": 28.0, "score": 100, "lane_drift": 8.0}
 
 
 func update_shot_balls(delta: float) -> void:
@@ -337,21 +459,22 @@ func update_shot_balls(delta: float) -> void:
 		var accel = Vector2(ball["accel"])
 		vel += accel * delta
 		pos += vel * delta
-		vel *= pow(0.992, delta * 60.0)
+		vel *= pow(0.991, delta * 60.0)
 		ball["pos"] = pos
 		ball["vel"] = vel
-		ball["spin"] = float(ball["spin"]) + vel.length() * delta * 0.045
+		ball["spin"] = float(ball["spin"]) + vel.length() * delta * 0.052
 		ball["life"] = float(ball["life"]) - delta
+		ball["age"] = float(ball.get("age", 0.0)) + delta
 
 		var trail: Array = ball["trail"]
 		trail.append(pos)
-		while trail.size() > 26:
+		while trail.size() > 42:
 			trail.pop_front()
 		ball["trail"] = trail
 
 		check_ball_enemy_hits(ball)
 
-		if float(ball["life"]) <= 0.0 or pos.y < -90.0 or pos.x < -170.0 or pos.x > SCREEN_SIZE.x + 170.0:
+		if float(ball["life"]) <= 0.0 or pos.y < -110.0 or pos.x < -210.0 or pos.x > SCREEN_SIZE.x + 210.0:
 			shot_balls.remove_at(i)
 		else:
 			shot_balls[i] = ball
@@ -359,30 +482,75 @@ func update_shot_balls(delta: float) -> void:
 
 func check_ball_enemy_hits(ball: Dictionary) -> void:
 	var pos = Vector2(ball["pos"])
-	var radius = float(ball["radius"])
+	var radius = float(ball.get("radius", 14.0))
+	var hit_ids: Array = ball.get("hit_ids", [])
 	for i in range(enemies.size() - 1, -1, -1):
 		var enemy = enemies[i]
+		var enemy_id = int(enemy.get("id", -1))
+		if hit_ids.has(enemy_id):
+			continue
 		var enemy_pos = Vector2(enemy["pos"])
-		if pos.distance_to(enemy_pos) <= radius + float(enemy["radius"]):
+		if pos.distance_to(enemy_pos) > radius + float(enemy.get("radius", 28.0)):
+			continue
+
+		hit_ids.append(enemy_id)
+		ball["hit_ids"] = hit_ids
+		ball["hits"] = int(ball.get("hits", 0)) + 1
+		ball["vel"] = Vector2(ball["vel"]) * 0.84
+		ball["life"] = min(float(ball["life"]), 2.6)
+
+		var damage = float(ball.get("damage", 1.0))
+		var type = int(enemy.get("type", 0))
+		var curve = abs(float(ball.get("curve", 0.0)))
+		var quality = float(ball.get("quality", 0.5))
+		if type == 2 and quality < 0.82:
+			damage = max(1.0, damage - 0.5)
+		if type == 4 and curve >= 0.44:
+			damage += 1.0
+
+		var hp = float(enemy.get("hp", 1.0)) - damage
+		if hp <= 0.0:
 			enemies.remove_at(i)
-			ball["hits"] = int(ball["hits"]) + 1
-			ball["vel"] = Vector2(ball["vel"]) * 0.88
-			ball["life"] = min(float(ball["life"]), 2.4)
-			combo += 1
-			combo_timer = 2.4
-			var gained = 100 + max(combo - 1, 0) * 35
-			score += gained
-			float_texts.append({
-				"pos": enemy_pos + Vector2(-28.0, -24.0),
-				"text": "+" + str(gained),
-				"ttl": 0.9,
-				"color": Color(1.0, 0.92, 0.3)
-			})
-			spawn_burst(enemy_pos, Color(1.0, 0.86, 0.28), 18)
-			shake(0.06, 3.8)
-			if int(ball["hits"]) >= 3:
-				ball["life"] = 0.0
-			return
+			register_enemy_kill(enemy, ball)
+		else:
+			enemy["hp"] = hp
+			enemies[i] = enemy
+			set_feedback("Armor cracked", Color(0.4, 0.95, 1.0))
+			spawn_burst(enemy_pos, Color(0.25, 0.9, 1.0), 12)
+			spawn_impact(enemy_pos, 62.0, Color(0.35, 0.88, 1.0))
+
+		if int(ball["hits"]) >= int(ball.get("pierce_limit", 2)):
+			ball["life"] = 0.0
+		return
+
+
+func register_enemy_kill(enemy: Dictionary, ball: Dictionary) -> void:
+	var enemy_pos = Vector2(enemy["pos"])
+	combo += 1
+	combo_timer = 2.6
+	var curve_bonus = 45 if abs(float(ball.get("curve", 0.0))) >= 0.44 else 0
+	var perfect_bonus = 75 if float(ball.get("quality", 0.0)) >= 0.82 else 0
+	var gained = int(enemy.get("score", 100)) + max(combo - 1, 0) * 40 + curve_bonus + perfect_bonus
+	score += gained
+	focus = min(MAX_FOCUS, focus + 7.0 + combo * 0.8)
+	float_texts.append({
+		"pos": enemy_pos + Vector2(-30.0, -30.0),
+		"text": "+" + str(gained),
+		"ttl": 0.92,
+		"color": Color(1.0, 0.92, 0.3),
+		"size": 25
+	})
+	if combo >= 3:
+		float_texts.append({
+			"pos": enemy_pos + Vector2(-34.0, -58.0),
+			"text": "x" + str(combo),
+			"ttl": 0.8,
+			"color": Color(0.3, 0.92, 1.0),
+			"size": 28
+		})
+	spawn_burst(enemy_pos, Color(1.0, 0.86, 0.28), 20)
+	spawn_impact(enemy_pos, 78.0, Color(1.0, 0.84, 0.18))
+	shake(0.06, 3.8)
 
 
 func update_effects(delta: float) -> void:
@@ -396,9 +564,18 @@ func update_effects(delta: float) -> void:
 		else:
 			particles[i] = p
 
+	for i in range(impact_fx.size() - 1, -1, -1):
+		var fx = impact_fx[i]
+		fx["ttl"] = float(fx["ttl"]) - delta
+		fx["age"] = float(fx.get("age", 0.0)) + delta
+		if float(fx["ttl"]) <= 0.0:
+			impact_fx.remove_at(i)
+		else:
+			impact_fx[i] = fx
+
 	for i in range(float_texts.size() - 1, -1, -1):
 		var t = float_texts[i]
-		t["pos"] = Vector2(t["pos"]) + Vector2(0.0, -38.0) * delta
+		t["pos"] = Vector2(t["pos"]) + Vector2(0.0, -40.0) * delta
 		t["ttl"] = float(t["ttl"]) - delta
 		if float(t["ttl"]) <= 0.0:
 			float_texts.remove_at(i)
@@ -409,30 +586,39 @@ func update_effects(delta: float) -> void:
 func spawn_burst(pos: Vector2, color: Color, count: int) -> void:
 	for i in range(count):
 		var angle = rng.randf_range(0.0, TAU)
-		var speed = rng.randf_range(70.0, 230.0)
+		var speed = rng.randf_range(70.0, 250.0)
 		particles.append({
 			"pos": pos,
 			"vel": Vector2(cos(angle), sin(angle)) * speed,
-			"ttl": rng.randf_range(0.28, 0.62),
-			"size": rng.randf_range(2.0, 5.0),
+			"ttl": rng.randf_range(0.28, 0.68),
+			"size": rng.randf_range(2.0, 5.4),
 			"color": color
 		})
+
+
+func spawn_impact(pos: Vector2, size: float, color: Color) -> void:
+	impact_fx.append({
+		"pos": pos,
+		"size": size,
+		"ttl": 0.32,
+		"age": 0.0,
+		"color": color
+	})
 
 
 func set_feedback(text: String, color: Color) -> void:
 	last_feedback = text
 	feedback_timer = 1.25
-	float_texts.append({
-		"pos": STRIKE_CENTER + Vector2(-80.0, -84.0),
-		"text": text,
-		"ttl": 0.9,
-		"color": color
-	})
 
 
 func shake(duration: float, amount: float) -> void:
 	shake_time = max(shake_time, duration)
 	shake_amount = max(shake_amount, amount)
+
+
+func get_aim_x() -> float:
+	var mouse = get_global_mouse_position()
+	return clamp((mouse.x - SCREEN_SIZE.x * 0.5) / (SCREEN_SIZE.x * 0.5), -1.0, 1.0)
 
 
 func quadratic_bezier(a: Vector2, b: Vector2, c: Vector2, t: float) -> Vector2:
@@ -447,7 +633,18 @@ func draw_tex_center(tex: Texture2D, center: Vector2, size: Vector2, color: Colo
 	draw_texture_rect(tex, Rect2(center - size * 0.5, size), false, color)
 
 
-func draw_text_shadow(pos: Vector2, text: String, size: int, color: Color, shadow: Color = Color(0, 0, 0, 0.8)) -> void:
+func draw_tex_fit_center(tex: Texture2D, center: Vector2, max_size: Vector2, color: Color = Color.WHITE) -> void:
+	if tex == null:
+		return
+	var raw = Vector2(float(tex.get_width()), float(tex.get_height()))
+	if raw.x <= 0.0 or raw.y <= 0.0:
+		return
+	var scale = min(max_size.x / raw.x, max_size.y / raw.y)
+	var size = raw * scale
+	draw_texture_rect(tex, Rect2(center - size * 0.5, size), false, color)
+
+
+func draw_text_shadow(pos: Vector2, text: String, size: int, color: Color, shadow: Color = Color(0, 0, 0, 0.82)) -> void:
 	draw_string(font, pos + Vector2(3.0, 4.0), text, HORIZONTAL_ALIGNMENT_LEFT, -1, size, shadow)
 	draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, size, color)
 
@@ -469,16 +666,19 @@ func _draw() -> void:
 	var offset = Vector2.ZERO
 	if shake_time > 0.0:
 		offset = Vector2(rng.randf_range(-shake_amount, shake_amount), rng.randf_range(-shake_amount, shake_amount))
-	draw_set_transform(offset)
+
 	draw_field()
+	draw_set_transform(offset)
+	draw_feed_path()
+	draw_curve_preview()
 	draw_strike_zone()
+	draw_enemies()
 	draw_launcher()
 	draw_player()
-	draw_enemies()
 	draw_balls()
 	draw_effects_layer()
-	draw_ui()
 	draw_set_transform(Vector2.ZERO)
+	draw_ui()
 
 
 func draw_field() -> void:
@@ -486,93 +686,194 @@ func draw_field() -> void:
 		draw_texture_rect(tex_field, Rect2(Vector2.ZERO, SCREEN_SIZE), false)
 	else:
 		draw_rect(Rect2(Vector2.ZERO, SCREEN_SIZE), Color(0.05, 0.38, 0.19))
-	draw_rect(Rect2(Vector2.ZERO, Vector2(SCREEN_SIZE.x, 96.0)), Color(0.0, 0.0, 0.0, 0.18), true)
-	draw_rect(Rect2(Vector2(0.0, 575.0), Vector2(SCREEN_SIZE.x, 145.0)), Color(0.0, 0.0, 0.0, 0.08), true)
-	for i in range(0, 28):
-		var x = float(i) * 48.0
-		draw_line(Vector2(x, DANGER_Y), Vector2(x + 24.0, DANGER_Y), Color(1.0, 0.22, 0.16, 0.55), 3.0)
+	draw_rect(Rect2(Vector2.ZERO, Vector2(SCREEN_SIZE.x, 108.0)), Color(0.0, 0.0, 0.0, 0.28), true)
+	draw_rect(Rect2(Vector2(0.0, 584.0), Vector2(SCREEN_SIZE.x, 136.0)), Color(0.0, 0.0, 0.0, 0.16), true)
+	for i in range(0, 30):
+		var x = float(i) * 46.0
+		draw_line(Vector2(x, DANGER_Y), Vector2(x + 24.0, DANGER_Y), Color(1.0, 0.22, 0.16, 0.58), 3.0)
+	for i in range(5):
+		var sweep = fmod(elapsed * 90.0 + float(i) * 260.0, SCREEN_SIZE.x + 360.0) - 180.0
+		draw_line(Vector2(sweep, 116.0), Vector2(sweep + 170.0, 584.0), Color(0.15, 0.85, 1.0, 0.08), 10.0)
+
+
+func draw_feed_path() -> void:
+	var side = 0.0
+	if not active_ball.is_empty():
+		side = float(active_ball.get("side", 0.0))
+	var end_pos = STRIKE_CENTER + Vector2(side * 28.0, 0.0)
+	var points = PackedVector2Array()
+	for i in range(20):
+		var t = float(i) / 19.0
+		points.append(quadratic_bezier(LAUNCHER_MOUTH, LAUNCHER_MOUTH + Vector2(side * 92.0, -156.0), end_pos, t))
+	draw_polyline(points, Color(0.6, 0.95, 1.0, 0.22), 2.0, true)
+
+
+func draw_curve_preview() -> void:
+	if active_ball.is_empty() and not is_charging:
+		return
+	var aim_x = get_aim_x()
+	var power = clamp(charge / MAX_CHARGE, 0.12, 1.0)
+	var quality = 0.68
+	if not active_ball.is_empty():
+		quality = max(0.35, get_timing_quality(active_ball))
+	var points = predict_curve_points(power, aim_x, quality)
+	var arc_color = Color(0.24, 0.9, 1.0, 0.5)
+	if abs(aim_x) >= 0.34:
+		arc_color = Color(1.0, 0.82, 0.18, 0.58)
+	draw_polyline(points, Color(0.0, 0.0, 0.0, 0.24), 13.0, true)
+	draw_polyline(points, arc_color, 7.0, true)
+	draw_polyline(points, Color(1.0, 1.0, 1.0, 0.82), 2.0, true)
+	for i in range(3, points.size(), 7):
+		draw_circle(points[i], 4.0, arc_color)
+
+
+func predict_curve_points(power: float, aim_x: float, quality: float) -> PackedVector2Array:
+	var points = PackedVector2Array()
+	var direction = Vector2(aim_x * 0.64, -1.0).normalized()
+	var speed = lerp(430.0, 940.0, power) * lerp(0.8, 1.2, quality)
+	var curve_peak = 1.0 - clamp(abs(power - 0.58) / 0.58, 0.0, 1.0) * 0.5
+	var accel = Vector2(aim_x * lerp(760.0, 1900.0, curve_peak) * lerp(0.82, 1.22, quality), 0.0)
+	var pos = STRIKE_CENTER
+	var vel = direction * speed
+	for i in range(34):
+		points.append(pos)
+		vel += accel * 0.033
+		pos += vel * 0.033
+		vel *= 0.991
+	return points
 
 
 func draw_strike_zone() -> void:
 	var quality = 0.0
 	if not active_ball.is_empty():
 		quality = get_timing_quality(active_ball)
-	var outer_color = Color(0.25, 0.85, 1.0, 0.34 if quality > 0.0 else 0.18)
-	var perfect_color = Color(0.95, 1.0, 0.25, 0.42 if quality >= 0.82 else 0.2)
-	draw_arc(STRIKE_CENTER, HIT_RADIUS, 0.0, TAU, 96, outer_color, 4.0, true)
-	draw_arc(STRIKE_CENTER, PERFECT_RADIUS, 0.0, TAU, 64, perfect_color, 4.0, true)
-	draw_line(STRIKE_CENTER + Vector2(-16.0, 0.0), STRIKE_CENTER + Vector2(16.0, 0.0), Color(1.0, 1.0, 1.0, 0.35), 2.0)
-	draw_line(STRIKE_CENTER + Vector2(0.0, -16.0), STRIKE_CENTER + Vector2(0.0, 16.0), Color(1.0, 1.0, 1.0, 0.35), 2.0)
+	var pulse = 1.0 + sin(elapsed * 8.0) * 0.04
+	var outer_color = Color(0.22, 0.95, 1.0, 0.35 if quality > 0.0 else 0.18)
+	var perfect_color = Color(1.0, 0.95, 0.22, 0.46 if quality >= 0.82 else 0.22)
+	draw_arc(STRIKE_CENTER, HIT_RADIUS * pulse, 0.0, TAU, 96, outer_color, 4.0, true)
+	draw_arc(STRIKE_CENTER, PERFECT_RADIUS * pulse, 0.0, TAU, 64, perfect_color, 5.0, true)
+	draw_line(STRIKE_CENTER + Vector2(-18.0, 0.0), STRIKE_CENTER + Vector2(18.0, 0.0), Color(1.0, 1.0, 1.0, 0.38), 2.0)
+	draw_line(STRIKE_CENTER + Vector2(0.0, -18.0), STRIKE_CENTER + Vector2(0.0, 18.0), Color(1.0, 1.0, 1.0, 0.38), 2.0)
 
 
 func draw_launcher() -> void:
-	var center = Vector2(720.0, 634.0)
-	draw_ellipse_shadow(center + Vector2(0.0, 62.0), Vector2(130.0, 28.0), Color(0, 0, 0, 0.35))
-	if tex_launcher != null:
-		draw_tex_center(tex_launcher, center, Vector2(160.0, 150.0))
-	else:
-		draw_rect(Rect2(center - Vector2(65.0, 40.0), Vector2(130.0, 80.0)), Color(0.15, 0.19, 0.24), true)
-	draw_circle(center + Vector2(0.0, 18.0), 10.0 + sin(elapsed * 8.0) * 2.0, Color(1.0, 0.58, 0.08, 0.7))
+	var center = LAUNCHER_DRAW_CENTER
+	draw_ellipse_shadow(center + Vector2(0.0, 54.0), Vector2(142.0, 30.0), Color(0, 0, 0, 0.36))
+	draw_tex_fit_center(tex_launcher, center, Vector2(170.0, 142.0))
+	draw_circle(center + Vector2(0.0, 12.0), 10.0 + sin(elapsed * 9.0) * 2.5, Color(0.28, 0.95, 1.0, 0.68))
 
 
 func draw_player() -> void:
-	var charge_pose = clamp(charge / MAX_CHARGE, 0.0, 1.0) if is_charging else 0.0
-	var kick_pose = player_anim / 0.34
-	var center = Vector2(505.0, 582.0) + Vector2(-charge_pose * 7.0 + kick_pose * 12.0, -kick_pose * 8.0)
-	draw_ellipse_shadow(center + Vector2(16.0, 130.0), Vector2(128.0, 28.0), Color(0, 0, 0, 0.34))
-	if tex_player != null:
-		draw_tex_center(tex_player, center, Vector2(210.0, 292.0))
-	else:
-		draw_circle(PLAYER_POS + Vector2(0.0, -116.0), 22.0, Color(0.95, 0.72, 0.48))
+	var frame = 0
+	if player_anim > 0.0:
+		var progress = 1.0 - player_anim / PLAYER_KICK_TIME
+		if progress < 0.22:
+			frame = 1
+		elif progress < 0.58:
+			frame = 2
+		else:
+			frame = 3
+	elif is_charging:
+		frame = 1
+
+	var offsets = [Vector2(-18.0, 8.0), Vector2(0.0, 0.0), Vector2(24.0, -2.0), Vector2(22.0, 2.0)]
+	var center = PLAYER_DRAW_CENTER + offsets[frame]
+	var max_size = Vector2(226.0, 286.0)
+	if frame == 2:
+		max_size = Vector2(284.0, 300.0)
+	draw_ellipse_shadow(PLAYER_DRAW_CENTER + Vector2(18.0, 132.0), Vector2(132.0, 28.0), Color(0, 0, 0, 0.35))
+	if kick_flash_timer > 0.0:
+		draw_circle(STRIKE_CENTER + Vector2(4.0, 12.0), 48.0 * kick_flash_timer / 0.18, Color(1.0, 0.92, 0.25, kick_flash_timer * 2.5))
+	if frame < tex_player_frames.size():
+		draw_tex_fit_center(tex_player_frames[frame], center, max_size)
 
 
 func draw_enemies() -> void:
 	for enemy in enemies:
 		var pos = Vector2(enemy["pos"])
-		var r = float(enemy["radius"])
+		var r = float(enemy.get("radius", 28.0))
+		var type = int(enemy.get("type", 0))
 		var wobble = sin(float(enemy["wobble"]) * 7.0) * 3.0
-		var tex = enemy_textures[int(enemy["id"]) % enemy_textures.size()] if enemy_textures.size() > 0 else null
-		var visual_size = Vector2(r * 3.3, r * 3.55)
-		draw_ellipse_shadow(pos + Vector2(0.0, r * 1.28), Vector2(r * 2.1, r * 0.44), Color(0, 0, 0, 0.25))
-		if tex != null:
-			draw_tex_center(tex, pos + Vector2(0.0, wobble), visual_size)
-		else:
-			draw_circle(pos + Vector2(0.0, wobble), r, Color(0.78, 0.18, 0.22))
-		var bar_w = r * 2.2
-		var bar_pos = pos + Vector2(-bar_w * 0.5, -r * 2.0 + wobble)
-		draw_rect(Rect2(bar_pos, Vector2(bar_w, 6.0)), Color(0.05, 0.05, 0.06, 0.9), true)
-		draw_rect(Rect2(bar_pos, Vector2(bar_w * 0.78, 6.0)), Color(1.0, 0.18, 0.15, 0.95), true)
+		var tex = enemy_textures[type] if type >= 0 and type < enemy_textures.size() else null
+		var visual_size = Vector2(r * 3.35, r * 3.58)
+		if type == 3:
+			visual_size *= 1.15
+		if type == 5:
+			draw_circle(pos + Vector2(0.0, wobble), r * 1.85, Color(1.0, 0.88, 0.12, 0.18))
+		draw_ellipse_shadow(pos + Vector2(0.0, r * 1.28), Vector2(r * 2.2, r * 0.46), Color(0, 0, 0, 0.28))
+		draw_tex_fit_center(tex, pos + Vector2(0.0, wobble), visual_size)
+		var hp = float(enemy.get("hp", 1.0))
+		var max_hp = max(1.0, float(enemy.get("max_hp", 1.0)))
+		var bar_w = r * 2.35
+		var bar_pos = pos + Vector2(-bar_w * 0.5, -r * 2.02 + wobble)
+		draw_rect(Rect2(bar_pos, Vector2(bar_w, 6.0)), Color(0.04, 0.05, 0.06, 0.92), true)
+		draw_rect(Rect2(bar_pos, Vector2(bar_w * clamp(hp / max_hp, 0.0, 1.0), 6.0)), enemy_bar_color(type), true)
+		if type == 2:
+			draw_arc(pos + Vector2(0.0, wobble), r * 1.48, -0.45, 0.45, 20, Color(0.2, 0.95, 1.0, 0.72), 4.0, true)
+
+
+func enemy_bar_color(type: int) -> Color:
+	match type:
+		1:
+			return Color(0.3, 1.0, 0.45, 0.95)
+		2:
+			return Color(0.2, 0.88, 1.0, 0.95)
+		3:
+			return Color(1.0, 0.22, 0.16, 0.95)
+		4:
+			return Color(0.72, 0.34, 1.0, 0.95)
+		5:
+			return Color(1.0, 0.88, 0.1, 0.95)
+	return Color(1.0, 0.36, 0.22, 0.95)
 
 
 func draw_balls() -> void:
 	if not active_ball.is_empty():
-		draw_football(Vector2(active_ball["pos"]), 14.0, float(active_ball.get("spin", 0.0)), Color(1.0, 1.0, 1.0))
+		draw_football_variant(Vector2(active_ball["pos"]), 14.0, float(active_ball.get("spin", 0.0)), "normal", Color.WHITE)
 
 	for ball in shot_balls:
 		var trail: Array = ball["trail"]
+		var kind = str(ball.get("kind", "normal"))
 		if trail.size() > 1:
 			var points = PackedVector2Array()
 			for p in trail:
 				points.append(Vector2(p))
-			draw_polyline(points, Color(1.0, 0.92, 0.2, 0.6), 9.0, true)
-			draw_polyline(points, Color(1.0, 1.0, 0.75, 0.9), 3.0, true)
-		draw_football(Vector2(ball["pos"]), float(ball["radius"]), float(ball["spin"]), Color(1.0, 1.0, 1.0))
+			var glow = Color(1.0, 0.88, 0.14, 0.58)
+			if kind == "curve":
+				glow = Color(0.16, 0.9, 1.0, 0.62)
+			elif kind == "fire":
+				glow = Color(1.0, 0.36, 0.08, 0.66)
+			draw_polyline(points, Color(0, 0, 0, 0.24), 16.0, true)
+			draw_polyline(points, glow, 11.0, true)
+			draw_polyline(points, Color(1.0, 1.0, 0.76, 0.95), 3.0, true)
+		draw_football_variant(Vector2(ball["pos"]), float(ball.get("radius", 14.0)), float(ball.get("spin", 0.0)), kind, Color.WHITE)
 
 
-func draw_football(pos: Vector2, radius: float, spin: float, tint: Color) -> void:
-	if tex_ball != null:
-		draw_tex_center(tex_ball, pos, Vector2(radius * 2.65, radius * 2.65), tint)
+func draw_football_variant(pos: Vector2, radius: float, spin: float, kind: String, tint: Color) -> void:
+	var tex = tex_ball
+	if kind == "curve" and tex_curve_ball != null:
+		tex = tex_curve_ball
+	elif kind == "fire" and tex_fire_ball != null:
+		tex = tex_fire_ball
+	if tex != null:
+		draw_tex_center(tex, pos, Vector2(radius * 3.0, radius * 3.0), tint)
 	else:
 		draw_circle(pos, radius, tint)
 		draw_circle(pos, radius, Color(0.04, 0.05, 0.06), false, 2.0)
-		for i in range(5):
-			var a = spin + float(i) * TAU / 5.0
-			var p = pos + Vector2(cos(a), sin(a)) * radius * 0.45
-			draw_circle(p, radius * 0.18, Color(0.04, 0.05, 0.06))
-		draw_arc(pos, radius * 0.68, spin, spin + PI, 20, Color(0.04, 0.05, 0.06, 0.75), 2.0, true)
+	if kind == "curve":
+		draw_arc(pos, radius * 1.9, spin, spin + PI * 1.35, 32, Color(0.26, 0.95, 1.0, 0.72), 3.0, true)
+	elif kind == "fire":
+		draw_arc(pos, radius * 1.9, spin, spin + PI * 1.4, 32, Color(1.0, 0.7, 0.1, 0.72), 4.0, true)
 
 
 func draw_effects_layer() -> void:
+	for fx in impact_fx:
+		var c = Color(fx["color"])
+		var alpha = clamp(float(fx["ttl"]) / 0.32, 0.0, 1.0)
+		c.a = alpha * 0.75
+		var size = float(fx["size"]) * (1.0 + float(fx.get("age", 0.0)) * 1.5)
+		draw_tex_center(tex_perfect_impact, Vector2(fx["pos"]), Vector2(size, size), c)
+
 	for p in particles:
 		var c = Color(p["color"])
 		c.a = clamp(float(p["ttl"]) * 2.2, 0.0, 1.0)
@@ -581,59 +882,85 @@ func draw_effects_layer() -> void:
 	for t in float_texts:
 		var c = Color(t["color"])
 		c.a = clamp(float(t["ttl"]) * 1.5, 0.0, 1.0)
-		draw_string(font, Vector2(t["pos"]), str(t["text"]), HORIZONTAL_ALIGNMENT_LEFT, -1, 24, c)
+		draw_text_shadow(Vector2(t["pos"]), str(t["text"]), int(t.get("size", 24)), c)
 
 
 func draw_ui() -> void:
-	draw_panel(Rect2(Vector2(18.0, 16.0), Vector2(230.0, 90.0)), Color(0, 0, 0, 0.74))
+	draw_panel(Rect2(Vector2(18.0, 16.0), Vector2(220.0, 88.0)), Color(0, 0, 0, 0.72), Color(0.3, 0.95, 1.0, 0.25))
 	draw_text_shadow(Vector2(34.0, 42.0), "SCORE", 22, Color.WHITE)
-	draw_text_shadow(Vector2(34.0, 92.0), str(score), 46, Color(1.0, 0.88, 0.1))
+	draw_text_shadow(Vector2(34.0, 92.0), str(score), 44, Color(1.0, 0.88, 0.1))
 
 	var wave = min(WAVE_COUNT, max(1, int(elapsed / 22.0) + 1))
 	var wave_progress = clamp(float(wave) / float(WAVE_COUNT), 0.0, 1.0)
-	draw_panel(Rect2(Vector2(494.0, 18.0), Vector2(292.0, 40.0)), Color(0, 0, 0, 0.72))
-	draw_text_shadow(Vector2(572.0, 48.0), "WAVE " + str(wave) + " / " + str(WAVE_COUNT), 22, Color.WHITE)
-	var wave_bar = Rect2(Vector2(470.0, 72.0), Vector2(340.0, 20.0))
-	draw_rect(wave_bar, Color(0.03, 0.04, 0.05, 0.9), true)
-	draw_rect(Rect2(wave_bar.position, Vector2(wave_bar.size.x * wave_progress, wave_bar.size.y)), Color(0.05, 0.86, 0.22, 0.95), true)
+	draw_panel(Rect2(Vector2(486.0, 18.0), Vector2(308.0, 42.0)), Color(0, 0, 0, 0.7), Color(0.3, 0.95, 1.0, 0.25))
+	draw_text_shadow(Vector2(568.0, 49.0), "WAVE " + str(wave) + " / " + str(WAVE_COUNT), 22, Color.WHITE)
+	var wave_bar = Rect2(Vector2(454.0, 74.0), Vector2(372.0, 18.0))
+	draw_rect(wave_bar, Color(0.03, 0.04, 0.05, 0.92), true)
+	draw_rect(Rect2(wave_bar.position, Vector2(wave_bar.size.x * wave_progress, wave_bar.size.y)), Color(0.08, 0.88, 0.42, 0.95), true)
 	draw_rect(wave_bar, Color(1, 1, 1, 0.35), false, 2.0)
-	draw_football(wave_bar.position + Vector2(wave_bar.size.x * wave_progress, 10.0), 15.0, elapsed * 4.0, Color.WHITE)
+	draw_football_variant(wave_bar.position + Vector2(wave_bar.size.x * wave_progress, 9.0), 14.0, elapsed * 4.0, "normal", Color.WHITE)
 
-	draw_panel(Rect2(Vector2(1030.0, 16.0), Vector2(224.0, 86.0)), Color(0, 0, 0, 0.74))
-	draw_text_shadow(Vector2(1050.0, 42.0), "LIVES", 22, Color.WHITE)
+	draw_panel(Rect2(Vector2(1036.0, 16.0), Vector2(222.0, 88.0)), Color(0, 0, 0, 0.72), Color(0.3, 0.95, 1.0, 0.25))
+	draw_text_shadow(Vector2(1054.0, 42.0), "LIVES", 22, Color.WHITE)
 	for i in range(MAX_LIVES):
 		var c = Color.WHITE if i < lives else Color(0.18, 0.18, 0.18, 0.55)
-		draw_tex_center(tex_heart, Vector2(1072.0 + i * 58.0, 75.0), Vector2(46.0, 46.0), c)
+		draw_tex_center(tex_heart, Vector2(1078.0 + i * 58.0, 76.0), Vector2(46.0, 46.0), c)
 
 	var power = clamp(charge / MAX_CHARGE, 0.0, 1.0)
-	draw_text_shadow(Vector2(28.0, 663.0), "POWER", 28, Color.WHITE)
-	var p_rect = Rect2(Vector2(30.0, 675.0), Vector2(295.0, 24.0))
+	draw_text_shadow(Vector2(28.0, 660.0), "POWER", 27, Color.WHITE)
+	var p_rect = Rect2(Vector2(30.0, 674.0), Vector2(290.0, 24.0))
 	draw_rect(p_rect, Color(0.02, 0.03, 0.04, 0.9), true)
-	draw_rect(Rect2(p_rect.position + Vector2(4.0, 4.0), Vector2((p_rect.size.x - 8.0) * power, p_rect.size.y - 8.0)), Color(0.15 + power * 0.85, 0.9 - power * 0.25, 0.15, 0.95), true)
+	draw_rect(Rect2(p_rect.position + Vector2(4.0, 4.0), Vector2((p_rect.size.x - 8.0) * power, p_rect.size.y - 8.0)), power_color(power), true)
 	draw_rect(p_rect, Color(1, 1, 1, 0.45), false, 3.0)
-	draw_panel(Rect2(Vector2(342.0, 662.0), Vector2(44.0, 44.0)), Color(0.08, 0.08, 0.09, 0.9))
-	draw_text_shadow(Vector2(357.0, 694.0), "E", 25, Color.WHITE)
 
-	draw_panel(Rect2(Vector2(1010.0, 648.0), Vector2(70.0, 62.0)), Color(0.02, 0.03, 0.05, 0.72))
-	draw_panel(Rect2(Vector2(1092.0, 648.0), Vector2(70.0, 62.0)), Color(0.02, 0.03, 0.05, 0.72))
-	draw_panel(Rect2(Vector2(1174.0, 648.0), Vector2(70.0, 62.0)), Color(0.02, 0.03, 0.05, 0.72))
-	draw_tex_center(tex_electric, Vector2(1045.0, 679.0), Vector2(52.0, 52.0))
-	draw_tex_center(tex_target, Vector2(1127.0, 679.0), Vector2(52.0, 52.0))
-	draw_tex_center(tex_fireball, Vector2(1209.0, 679.0), Vector2(52.0, 52.0))
+	var aim_x = get_aim_x()
+	var curve_amount = abs(aim_x)
+	draw_text_shadow(Vector2(354.0, 660.0), "CURVE", 27, Color.WHITE)
+	var c_rect = Rect2(Vector2(356.0, 674.0), Vector2(230.0, 24.0))
+	draw_rect(c_rect, Color(0.02, 0.03, 0.04, 0.9), true)
+	draw_rect(Rect2(c_rect.position + Vector2(4.0, 4.0), Vector2((c_rect.size.x - 8.0) * curve_amount, c_rect.size.y - 8.0)), Color(0.22, 0.9, 1.0, 0.95), true)
+	draw_rect(c_rect, Color(1, 1, 1, 0.45), false, 3.0)
+	var curve_dir = "<" if aim_x < -0.08 else ">" if aim_x > 0.08 else "-"
+	draw_text_shadow(Vector2(596.0, 696.0), curve_dir, 28, Color(0.55, 0.96, 1.0))
 
-	var mouse = get_global_mouse_position()
-	var aim_x = clamp((mouse.x - SCREEN_SIZE.x * 0.5) / (SCREEN_SIZE.x * 0.5), -1.0, 1.0)
-	var aim_end = STRIKE_CENTER + Vector2(aim_x * 260.0, -235.0)
-	draw_line(STRIKE_CENTER, aim_end, Color(0.7, 0.95, 1.0, 0.32), 3.0)
-	draw_circle(aim_end, 7.0, Color(0.7, 0.95, 1.0, 0.72))
+	draw_skill_panel()
+
+	var aim_end = predict_curve_points(max(0.2, power), aim_x, 0.72)[12]
+	draw_circle(aim_end, 6.0, Color(0.7, 0.95, 1.0, 0.5))
 
 	if feedback_timer > 0.0:
-		var fb_color = Color(1.0, 0.9, 0.1, min(feedback_timer, 1.0))
-		draw_text_shadow(Vector2(932.0, 180.0), last_feedback, 30, fb_color)
+		var fb_color = Color(1.0, 0.92, 0.12, min(feedback_timer, 1.0))
+		draw_text_shadow(Vector2(924.0, 180.0), last_feedback, 30, fb_color)
 
 	if game_over:
-		draw_rect(Rect2(Vector2.ZERO, SCREEN_SIZE), Color(0.0, 0.0, 0.0, 0.62), true)
-		draw_string(font, Vector2(500.0, 310.0), "GAME OVER", HORIZONTAL_ALIGNMENT_LEFT, -1, 56, Color(1.0, 0.28, 0.24))
-		draw_string(font, Vector2(495.0, 365.0), "Final Score: " + str(score), HORIZONTAL_ALIGNMENT_LEFT, -1, 30, Color.WHITE)
-		draw_string(font, Vector2(420.0, 418.0), "Press R or click to restart", HORIZONTAL_ALIGNMENT_LEFT, -1, 30, Color(0.8, 0.94, 1.0))
+		draw_rect(Rect2(Vector2.ZERO, SCREEN_SIZE), Color(0.0, 0.0, 0.0, 0.64), true)
+		draw_text_shadow(Vector2(494.0, 310.0), "GAME OVER", 56, Color(1.0, 0.28, 0.24))
+		draw_text_shadow(Vector2(500.0, 365.0), "Final Score: " + str(score), 30, Color.WHITE)
+		draw_text_shadow(Vector2(420.0, 418.0), "Press R or click to restart", 30, Color(0.8, 0.94, 1.0))
 
+
+func power_color(power: float) -> Color:
+	if focus_time > 0.0:
+		return Color(0.18, 0.88, 1.0, 0.98)
+	return Color(0.18 + power * 0.82, 0.92 - power * 0.28, 0.15, 0.95)
+
+
+func draw_skill_panel() -> void:
+	var base = Vector2(954.0, 642.0)
+	var focus_ratio = clamp(focus / MAX_FOCUS, 0.0, 1.0)
+	var active = focus_time > 0.0
+	var icons = [tex_curve_icon, tex_pierce_icon, tex_slow_icon]
+	for i in range(3):
+		var rect = Rect2(base + Vector2(i * 88.0, 0.0), Vector2(74.0, 66.0))
+		var border = Color(0.3, 0.95, 1.0, 0.65) if active else Color(1.0, 1.0, 1.0, 0.22)
+		draw_panel(rect, Color(0.02, 0.03, 0.05, 0.74), border)
+		draw_tex_center(icons[i], rect.position + rect.size * 0.5, Vector2(52.0, 52.0), Color.WHITE if focus_ratio >= 1.0 or active else Color(0.55, 0.55, 0.55, 0.65))
+
+	var meter = Rect2(Vector2(954.0, 620.0), Vector2(250.0, 12.0))
+	draw_rect(meter, Color(0.02, 0.03, 0.04, 0.9), true)
+	draw_rect(Rect2(meter.position, Vector2(meter.size.x * focus_ratio, meter.size.y)), Color(0.2, 0.9, 1.0, 0.95), true)
+	draw_rect(meter, Color(1, 1, 1, 0.35), false, 2.0)
+	var label = "FOCUS"
+	if active:
+		label = "FOCUS " + str(int(ceil(focus_time)))
+	draw_text_shadow(Vector2(954.0, 616.0), label, 20, Color.WHITE)

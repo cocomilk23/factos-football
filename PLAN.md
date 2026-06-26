@@ -16,12 +16,15 @@
 
 Build a Godot 2D survival shooter prototype with a fixed football player, a ball launcher, timed feed balls, hold-to-charge volley shots, curved ball flight, enemies advancing from the top, hit scoring, combo, three lives, game over, and restart.
 
-- **Assets needed:** Current version uses generated PNG assets for the stadium field, player, feeder, ball, enemy variants, hearts, and bottom HUD icons; gameplay effects remain code-driven for fast iteration.
+- **Assets needed:** Current version uses generated premium pixel-art PNG assets for the stadium field, 4-frame player animation, feeder, ball variants, six enemy variants, hearts, and bottom HUD icons; gameplay effects remain code-driven for fast iteration.
 - **Verify:**
   - Player remains fixed near the bottom.
   - Launcher regularly feeds one ball into the strike area.
   - Holding Space or left mouse charges power; releasing attempts a volley.
   - Mouse horizontal position changes direction and curve.
+  - Predicted curved path and shot trail make the bend visible.
+  - Perfect timing builds Focus; `E` or right mouse activates slow/focus power shots.
+  - Enemy variants have different speed, HP, score, and curve interactions.
   - Football can destroy enemies and continue through short lines of enemies.
   - Enemies spawn from varied horizontal positions and move toward the player.
   - Reaching enemies remove one life; life zero shows game over.
