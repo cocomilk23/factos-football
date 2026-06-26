@@ -1,0 +1,9 @@
+.agents
+AGENTS.md
+.codex
+assets
+screenshots
+.godot
+*.import
+bin/
+obj/
