@@ -526,6 +526,7 @@ func kick_active_ball(released_charge: float, quality: float) -> void:
 		"accel": Vector2.ZERO,
 		"life": 4.8,
 		"age": 0.0,
+		"visible_delay": 0.1,
 		"radius": 14.0 if is_perfect else 13.0,
 		"trail": [active_ball["pos"]],
 		"spin": float(active_ball.get("spin", 0.0)),
@@ -688,6 +689,7 @@ func update_shot_balls(delta: float) -> void:
 		ball["spin"] = float(ball["spin"]) + vel.length() * delta * 0.052
 		ball["life"] = float(ball["life"]) - delta
 		ball["age"] = float(ball.get("age", 0.0)) + delta
+		ball["visible_delay"] = max(float(ball.get("visible_delay", 0.0)) - delta, 0.0)
 
 		var trail: Array = ball["trail"]
 		trail.append(pos)
@@ -1206,9 +1208,11 @@ func enemy_bar_color(type: int) -> Color:
 
 
 func draw_balls() -> void:
-	if not active_ball.is_empty():
+	if not active_ball.is_empty() and player_anim <= 0.0:
 		draw_football_variant(Vector2(active_ball["pos"]), 13.0, float(active_ball.get("spin", 0.0)), "normal", Color.WHITE)
 	for ball in shot_balls:
+		if float(ball.get("visible_delay", 0.0)) > 0.0:
+			continue
 		var trail: Array = ball["trail"]
 		var kind = str(ball.get("kind", "normal"))
 		if trail.size() > 1:
