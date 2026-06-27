@@ -19,7 +19,7 @@ def source(name: str) -> Path:
 
 def save_background(path: Path) -> None:
     img = Image.open(path).convert("RGB")
-    img = img.resize((1280, 720), Image.Resampling.NEAREST)
+    img = img.resize((720, 1280), Image.Resampling.NEAREST)
     img.save(OUT / "stadium_field.png")
 
 
@@ -100,7 +100,7 @@ def save_asset(img: Image.Image, name: str, max_w: int, max_h: int) -> None:
     resize_fit(trim_alpha(img, 10), max_w, max_h).save(OUT / name)
 
 
-def process_player_sheet(path: Path) -> None:
+def process_player_sheet(path: Path, prefix: str, write_legacy: bool = False) -> None:
     img = Image.open(path).convert("RGBA")
     cell_w = img.width // 4
     h = img.height
@@ -114,9 +114,12 @@ def process_player_sheet(path: Path) -> None:
         cell = img.crop((idx * cell_w, 0, (idx + 1) * cell_w, h))
         cropped = cell.crop(box)
         frame = trim_alpha(alpha_from_key(cropped, (0, 255, 0), 130), 12)
-        resize_fit(frame, 290, 360).save(OUT / f"player_frame_{idx}.png")
-        if idx == 0:
-            resize_fit(frame, 290, 360).save(OUT / "player_volley.png")
+        result = resize_fit(frame, 290, 360)
+        result.save(OUT / f"player_{prefix}_frame_{idx}.png")
+        if write_legacy:
+            result.save(OUT / f"player_frame_{idx}.png")
+            if idx == 0:
+                result.save(OUT / "player_volley.png")
 
 
 def process_enemies(path: Path) -> None:
@@ -153,8 +156,10 @@ def process_props(path: Path) -> None:
 
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
-    save_background(source("v3_pixel_background.png"))
-    process_player_sheet(source("v3_pixel_player_sheet.png"))
+    save_background(source("v4_mobile_background.png"))
+    process_player_sheet(source("v4_messi_sheet.png"), "messi", True)
+    process_player_sheet(source("v4_ronaldo_sheet.png"), "ronaldo")
+    process_player_sheet(source("v4_neymar_sheet.png"), "neymar")
     process_enemies(source("v3_pixel_enemy_sheet.png"))
     process_props(source("v3_pixel_prop_sheet.png"))
 
