@@ -19,16 +19,18 @@ func _initialize() -> void:
 		scene.STRIKE_CENTER + Vector2(120.0, -520.0),
 	]
 	var path = scene.build_swipe_path(0.74)
-	if path.size() <= 3 or path[0] != scene.STRIKE_CENTER:
+	if path.size() < 20 or path[0] != scene.STRIKE_CENTER:
 		printerr("ASSERT FAIL: swipe path did not build correctly")
 		quit(1)
 		return
-	if path[1].distance_to(scene.STRIKE_CENTER + Vector2(36.0, -260.0)) > 0.01 or path[2].distance_to(scene.STRIKE_CENTER + Vector2(120.0, -520.0)) > 0.01:
-		printerr("ASSERT FAIL: swipe path did not preserve the drawn gesture")
+	var path_dir = (path[path.size() - 1] - path[0]).normalized()
+	var first_dir = (path[1] - path[0]).normalized()
+	if path_dir.distance_to(first_dir) > 0.01:
+		printerr("ASSERT FAIL: swipe path was not a straight shot")
 		quit(1)
 		return
-	if path[path.size() - 1].y >= path[2].y - 400.0:
-		printerr("ASSERT FAIL: swipe path did not continue beyond the drawn gesture")
+	if path[path.size() - 1].distance_to(path[0]) < 1400.0:
+		printerr("ASSERT FAIL: short swipe did not continue into a full shot")
 		quit(1)
 		return
 
@@ -102,7 +104,6 @@ func _initialize() -> void:
 		"hit_ids": [],
 		"damage": 1.0,
 		"quality": 0.9,
-		"curve": 0.0,
 		"pierce_limit": 2
 	}
 	scene.check_ball_enemy_hits(ball)
@@ -112,6 +113,6 @@ func _initialize() -> void:
 		quit(1)
 		return
 
-	print("ASSERT PASS: audio, exact path, gesture guard, timeout, and hit scoring")
+	print("ASSERT PASS: audio, straight shot, gesture guard, timeout, and hit scoring")
 	quit(0)
 

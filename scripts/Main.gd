@@ -18,11 +18,9 @@ var rng = RandomNumberGenerator.new()
 var font: Font
 var tex_field: Texture2D
 var tex_ball: Texture2D
-var tex_curve_ball: Texture2D
 var tex_fire_ball: Texture2D
 var tex_perfect_impact: Texture2D
 var tex_heart: Texture2D
-var tex_curve_icon: Texture2D
 var tex_pierce_icon: Texture2D
 var tex_slow_icon: Texture2D
 var tex_wowo: Texture2D
@@ -79,8 +77,6 @@ var skill_banner_text = ""
 var skill_banner_timer = 0.0
 var skill_banner_age = 0.0
 var skill_banner_color = Color.WHITE
-var shot_intent_side = 0.0
-var shot_intent_curve = 0.0
 
 
 func _ready() -> void:
@@ -96,11 +92,9 @@ func _ready() -> void:
 func load_assets() -> void:
 	tex_field = load("res://assets/img/stadium_field.png")
 	tex_ball = load("res://assets/img/ball_projectile.png")
-	tex_curve_ball = load("res://assets/img/curve_ball.png")
 	tex_fire_ball = load("res://assets/img/fireball_projectile.png")
 	tex_perfect_impact = load("res://assets/img/perfect_impact.png")
 	tex_heart = load("res://assets/img/heart_icon.png")
-	tex_curve_icon = load("res://assets/img/curve_icon.png")
 	tex_pierce_icon = load("res://assets/img/pierce_icon.png")
 	tex_slow_icon = load("res://assets/img/slow_icon.png")
 	tex_wowo = load("res://assets/img/skill_wowo.png")
@@ -220,7 +214,7 @@ func build_character_defs() -> void:
 			"role": "Left Foot",
 			"skill": "给你俩窝窝",
 			"power": 0.92,
-			"curve": 1.42,
+			"aim": 1.42,
 			"timing": 1.18,
 			"focus_gain": 1.15,
 			"skill_cost": 120.0,
@@ -237,7 +231,7 @@ func build_character_defs() -> void:
 			"role": "Power Drive",
 			"skill": "罗三脚",
 			"power": 1.22,
-			"curve": 0.84,
+			"aim": 0.84,
 			"timing": 0.96,
 			"focus_gain": 0.95,
 			"skill_cost": 155.0,
@@ -254,7 +248,7 @@ func build_character_defs() -> void:
 			"role": "Trick Spin",
 			"skill": "马尔翻滚",
 			"power": 1.0,
-			"curve": 1.2,
+			"aim": 1.2,
 			"timing": 1.05,
 			"focus_gain": 1.05,
 			"skill_cost": 130.0,
@@ -701,15 +695,13 @@ func kick_active_ball(released_charge: float, quality: float) -> void:
 	var power = clamp(released_charge / MAX_CHARGE, 0.18, 1.0)
 	var path = build_swipe_path(power)
 	var path_len = max(1.0, polyline_length(path))
-	var aim_x = estimate_swipe_curve(path)
+	var direction = get_aim_direction()
 	var speed = lerp(620.0, 1120.0, power) * float(profile.get("power", 1.0))
 
 	var is_perfect = power >= 0.82 and swipe_points.size() >= 5
 	var kind = "normal"
 	if str(profile.get("id", "")) == "ronaldo" and power >= 0.86:
 		kind = "fire"
-	elif abs(aim_x) >= 0.18:
-		kind = "curve"
 
 	var damage = float(profile.get("damage", 1.0))
 	if is_perfect:
@@ -717,7 +709,7 @@ func kick_active_ball(released_charge: float, quality: float) -> void:
 
 	var ball = {
 		"pos": active_ball["pos"],
-		"vel": get_aim_direction() * speed,
+		"vel": direction * speed,
 		"accel": Vector2.ZERO,
 		"life": 4.8,
 		"age": 0.0,
@@ -732,7 +724,6 @@ func kick_active_ball(released_charge: float, quality: float) -> void:
 		"path_speed": speed,
 		"hits": 0,
 		"hit_ids": [],
-		"curve": aim_x,
 		"power": power,
 		"quality": quality,
 		"damage": damage,
@@ -745,11 +736,11 @@ func kick_active_ball(released_charge: float, quality: float) -> void:
 		perfect_streak += 1
 		var focus_gain = (8.0 + perfect_streak * 1.2) * float(profile.get("focus_gain", 1.0))
 		focus = min(focus_capacity(), focus + focus_gain)
-		set_feedback("Power Curve x" + str(perfect_streak), Color(0.32, 0.95, 1.0))
+		set_feedback("Power Shot x" + str(perfect_streak), Color(0.32, 0.95, 1.0))
 		spawn_burst(Vector2(active_ball["pos"]), Color(0.35, 0.94, 1.0), 18)
 		spawn_impact(Vector2(active_ball["pos"]), 78.0, Color(0.4, 0.95, 1.0))
 	else:
-		set_feedback("Swipe Shot", Color(0.78, 1.0, 0.45))
+		set_feedback("Straight Shot", Color(0.78, 1.0, 0.45))
 
 	active_ball.clear()
 	feed_timer = 0.12
@@ -929,11 +920,11 @@ func check_ball_enemy_hits(ball: Dictionary) -> void:
 
 		var damage = float(ball.get("damage", 1.0))
 		var type = int(enemy.get("type", 0))
-		var curve = abs(float(ball.get("curve", 0.0)))
+		var power = float(ball.get("power", 0.0))
 		var quality = float(ball.get("quality", 0.5))
 		if type == 2 and quality < 0.82:
 			damage = max(1.0, damage - 0.5)
-		if type == 4 and curve >= 0.44:
+		if type == 4 and power >= 0.78:
 			damage += 1.0
 
 		var hp = float(enemy.get("hp", 1.0)) - damage
@@ -957,9 +948,9 @@ func register_enemy_kill(enemy: Dictionary, ball: Dictionary) -> void:
 	var profile = selected_profile()
 	combo += 1
 	combo_timer = 2.6
-	var curve_bonus = 45 if abs(float(ball.get("curve", 0.0))) >= 0.44 else 0
+	var power_bonus = 45 if float(ball.get("power", 0.0)) >= 0.82 else 0
 	var perfect_bonus = 75 if float(ball.get("quality", 0.0)) >= 0.82 else 0
-	var gained = int(enemy.get("score", 100)) + max(combo - 1, 0) * 40 + curve_bonus + perfect_bonus
+	var gained = int(enemy.get("score", 100)) + max(combo - 1, 0) * 40 + power_bonus + perfect_bonus
 	score += gained
 	focus = min(focus_capacity(), focus + (5.0 + combo * 0.55) * float(profile.get("focus_gain", 1.0)))
 	float_texts.append({
@@ -1139,18 +1130,25 @@ func shake(duration: float, amount: float) -> void:
 
 
 func get_aim_x() -> float:
-	if is_charging and swipe_points.size() >= 2:
-		return estimate_swipe_curve(build_swipe_path(max(0.2, charge / MAX_CHARGE)))
-	var mouse = get_global_mouse_position()
-	return clamp((mouse.x - SCREEN_SIZE.x * 0.5) / (SCREEN_SIZE.x * 0.5), -1.0, 1.0)
+	return clamp(get_aim_direction().x, -1.0, 1.0)
 
 
 func get_aim_direction() -> Vector2:
 	if swipe_points.size() >= 2:
-		var delta = Vector2(swipe_points.back()) - Vector2(swipe_points.front())
+		var end = Vector2(swipe_points.back())
+		var delta = end - Vector2(swipe_points.front())
+		for i in range(swipe_points.size() - 2, -1, -1):
+			var candidate = end - Vector2(swipe_points[i])
+			if candidate.length() >= 24.0:
+				delta = candidate
+				break
 		if delta.length() >= 1.0:
-			return delta.normalized()
+			return clamp_forward_direction(delta)
 	var delta = get_global_mouse_position() - STRIKE_CENTER
+	return clamp_forward_direction(delta)
+
+
+func clamp_forward_direction(delta: Vector2) -> Vector2:
 	if delta.length() < 24.0:
 		delta = Vector2(0.0, -1.0)
 	if delta.y > -18.0:
@@ -1161,64 +1159,12 @@ func get_aim_direction() -> Vector2:
 func build_swipe_path(power: float) -> PackedVector2Array:
 	var points = PackedVector2Array()
 	points.append(STRIKE_CENTER)
-	if swipe_points.size() < 2:
-		var dir = get_aim_direction()
-		var end = STRIKE_CENTER + dir * (860.0 + power * 440.0)
-		for i in range(1, 49):
-			var t = float(i) / 48.0
-			points.append(STRIKE_CENTER.lerp(end, t))
-		return points
-
-	var origin = Vector2(swipe_points.front())
-	for i in range(1, swipe_points.size()):
-		var p = STRIKE_CENTER + (Vector2(swipe_points[i]) - origin)
-		if points[points.size() - 1].distance_to(p) >= 1.0:
-			points.append(p)
-	if points.size() < 2:
-		points.append(STRIKE_CENTER + Vector2(0.0, -240.0))
-	append_path_extension(points, power)
-	shot_intent_side = clamp((points[points.size() - 1].x - STRIKE_CENTER.x) / (SCREEN_SIZE.x * 0.5), -1.0, 1.0)
-	shot_intent_curve = estimate_path_curve(points)
+	var dir = get_aim_direction()
+	var end = STRIKE_CENTER + dir * (1180.0 + power * 620.0)
+	for i in range(1, 57):
+		var t = float(i) / 56.0
+		points.append(STRIKE_CENTER.lerp(end, t))
 	return points
-
-
-func append_path_extension(points: PackedVector2Array, power: float) -> void:
-	if points.size() < 2:
-		return
-	var last = points[points.size() - 1]
-	var dir = Vector2.ZERO
-	for i in range(points.size() - 2, -1, -1):
-		var candidate = last - points[i]
-		if candidate.length() >= 18.0:
-			dir = candidate.normalized()
-			break
-	if dir.length() < 0.1:
-		dir = Vector2(0.0, -1.0)
-	var extension = 820.0 + power * 540.0
-	for i in range(1, 25):
-		points.append(last + dir * extension * (float(i) / 24.0))
-
-
-func estimate_swipe_curve(path: PackedVector2Array) -> float:
-	if path.size() < 3:
-		return clamp((path[path.size() - 1].x - STRIKE_CENTER.x) / (SCREEN_SIZE.x * 0.45), -1.0, 1.0)
-	return estimate_path_curve(path)
-
-
-func estimate_path_curve(path: PackedVector2Array) -> float:
-	if path.size() < 3:
-		return 0.0
-	var start = path[0]
-	var end = path[path.size() - 1]
-	var total = max(1.0, float(path.size() - 1))
-	var max_offset = 0.0
-	for i in range(1, path.size() - 1):
-		var t = float(i) / total
-		var straight = start.lerp(end, t)
-		var offset = path[i].x - straight.x
-		if abs(offset) > abs(max_offset):
-			max_offset = offset
-	return clamp(max_offset / 180.0, -1.0, 1.0)
 
 
 func polyline_length(points: PackedVector2Array) -> float:
@@ -1302,7 +1248,7 @@ func _draw() -> void:
 	if shake_time > 0.0:
 		offset = Vector2(rng.randf_range(-shake_amount, shake_amount), rng.randf_range(-shake_amount, shake_amount))
 	draw_set_transform(offset)
-	draw_curve_preview()
+	draw_aim_preview()
 	draw_strike_zone()
 	draw_enemies()
 	draw_player()
@@ -1325,31 +1271,21 @@ func draw_field() -> void:
 		draw_line(Vector2(x, DANGER_Y), Vector2(x + 22.0, DANGER_Y), Color(1.0, 0.22, 0.16, 0.58), 3.0)
 
 
-func draw_curve_preview() -> void:
+func draw_aim_preview() -> void:
 	if not is_charging:
 		return
 	if is_charging and swipe_points.size() >= 2:
-		var path = build_swipe_path(max(0.2, charge / MAX_CHARGE))
-		draw_polyline(path, Color(0.0, 0.0, 0.0, 0.16), 4.0, true)
-		draw_polyline(path, Color(0.42, 0.95, 1.0, 0.52), 1.8, true)
+		var power = clamp(charge / MAX_CHARGE, 0.18, 1.0)
+		var dir = get_aim_direction()
+		var length = lerp(120.0, 260.0, power)
+		var path = PackedVector2Array([
+			STRIKE_CENTER,
+			STRIKE_CENTER + dir * length
+		])
+		draw_polyline(path, Color(0.0, 0.0, 0.0, 0.18), 4.0, true)
+		draw_polyline(path, Color(0.42, 0.95, 1.0, 0.58), 2.0, true)
+		draw_circle(path[1], 4.0, Color(0.75, 1.0, 1.0, 0.7))
 		return
-
-
-func predict_curve_points(power: float, aim_x: float, quality: float) -> PackedVector2Array:
-	var profile = selected_profile()
-	var points = PackedVector2Array()
-	var direction = get_aim_direction()
-	var speed = lerp(500.0, 1050.0, power) * lerp(0.8, 1.2, quality) * float(profile.get("power", 1.0))
-	var curve_peak = 1.0 - clamp(abs(power - 0.58) / 0.58, 0.0, 1.0) * 0.5
-	var accel = Vector2(aim_x * lerp(520.0, 1500.0, curve_peak) * lerp(0.82, 1.22, quality) * float(profile.get("curve", 1.0)), 0.0)
-	var pos = STRIKE_CENTER
-	var vel = direction * speed
-	for i in range(46):
-		points.append(pos)
-		vel += accel * 0.033
-		pos += vel * 0.033
-		vel *= 0.991
-	return points
 
 
 func draw_strike_zone() -> void:
@@ -1439,9 +1375,7 @@ func draw_balls() -> void:
 			for p in trail:
 				points.append(Vector2(p))
 			var glow = Color(1.0, 0.88, 0.14, 0.58)
-			if kind == "curve":
-				glow = Color(0.16, 0.9, 1.0, 0.62)
-			elif kind == "fire":
+			if kind == "fire":
 				glow = Color(1.0, 0.36, 0.08, 0.66)
 			draw_polyline(points, Color(0, 0, 0, 0.18), 5.0, true)
 			draw_polyline(points, glow, 2.8, true)
@@ -1509,18 +1443,14 @@ func draw_skill_drag_preview() -> void:
 
 func draw_football_variant(pos: Vector2, radius: float, spin: float, kind: String, tint: Color) -> void:
 	var tex = tex_ball
-	if kind == "curve" and tex_curve_ball != null:
-		tex = tex_curve_ball
-	elif kind == "fire" and tex_fire_ball != null:
+	if kind == "fire" and tex_fire_ball != null:
 		tex = tex_fire_ball
 	if tex != null:
 		draw_tex_center(tex, pos, Vector2(radius * 3.0, radius * 3.0), tint)
 	else:
 		draw_circle(pos, radius, tint)
 		draw_circle(pos, radius, Color(0.04, 0.05, 0.06), false, 2.0)
-	if kind == "curve":
-		draw_arc(pos, radius * 1.8, spin, spin + PI * 1.35, 28, Color(0.26, 0.95, 1.0, 0.72), 3.0, true)
-	elif kind == "fire":
+	if kind == "fire":
 		draw_arc(pos, radius * 1.8, spin, spin + PI * 1.4, 28, Color(1.0, 0.7, 0.1, 0.72), 4.0, true)
 
 
@@ -1568,7 +1498,7 @@ func draw_ui() -> void:
 	draw_text_shadow(Vector2(22.0, 1207.0), "POWER", 20, Color.WHITE)
 	draw_meter(Rect2(Vector2(22.0, 1220.0), Vector2(276.0, 22.0)), power, power_color(power))
 	var aim_x = get_aim_x()
-	draw_text_shadow(Vector2(326.0, 1207.0), "CURVE", 20, Color.WHITE)
+	draw_text_shadow(Vector2(326.0, 1207.0), "AIM", 20, Color.WHITE)
 	draw_meter(Rect2(Vector2(326.0, 1220.0), Vector2(200.0, 22.0)), abs(aim_x), Color(0.22, 0.9, 1.0, 0.95))
 	draw_text_shadow(Vector2(536.0, 1242.0), "<" if aim_x < -0.08 else ">" if aim_x > 0.08 else "-", 24, Color(0.55, 0.96, 1.0))
 	draw_skill_panel()
@@ -1654,7 +1584,7 @@ func draw_character_card(index: int) -> void:
 	draw_text_shadow(rect.position + Vector2(250.0, 54.0), str(profile.get("name", "")), 32, Color.WHITE)
 	draw_text_shadow(rect.position + Vector2(250.0, 91.0), str(profile.get("role", "")), 21, Color(profile.get("color", Color.WHITE)))
 	draw_text_shadow(rect.position + Vector2(250.0, 130.0), "POWER  " + stat_bars(float(profile.get("power", 1.0)), 0.8, 1.3), 18, Color.WHITE)
-	draw_text_shadow(rect.position + Vector2(250.0, 164.0), "CURVE  " + stat_bars(float(profile.get("curve", 1.0)), 0.8, 1.45), 18, Color.WHITE)
+	draw_text_shadow(rect.position + Vector2(250.0, 164.0), "AIM     " + stat_bars(float(profile.get("aim", 1.0)), 0.8, 1.45), 18, Color.WHITE)
 	draw_text_shadow(rect.position + Vector2(250.0, 204.0), skill_name(profile), 22, Color(1.0, 0.92, 0.22))
 
 
