@@ -19,15 +19,14 @@ func _initialize() -> void:
 		scene.STRIKE_CENTER + Vector2(120.0, -520.0),
 	]
 	var path = scene.build_swipe_path(0.74)
-	if path.size() < 20 or path[0] != scene.STRIKE_CENTER:
+	if path.size() != 3 or path[0] != scene.STRIKE_CENTER:
 		printerr("ASSERT FAIL: swipe path did not build correctly")
 		quit(1)
 		return
-	for i in range(1, path.size()):
-		if path[i].y > path[i - 1].y + 0.01:
-			printerr("ASSERT FAIL: swipe path moved backward at point ", i)
-			quit(1)
-			return
+	if path[1].distance_to(scene.STRIKE_CENTER + Vector2(36.0, -260.0)) > 0.01 or path[2].distance_to(scene.STRIKE_CENTER + Vector2(120.0, -520.0)) > 0.01:
+		printerr("ASSERT FAIL: swipe path did not preserve the drawn gesture")
+		quit(1)
+		return
 
 	scene.swipe_points = [
 		scene.STRIKE_CENTER,
@@ -48,6 +47,36 @@ func _initialize() -> void:
 		printerr("ASSERT FAIL: flat left shot did not preserve 180-degree range")
 		quit(1)
 		return
+
+	var messy_points = [
+		scene.STRIKE_CENTER,
+		scene.STRIKE_CENTER + Vector2(120.0, -60.0),
+		scene.STRIKE_CENTER + Vector2(0.0, -120.0),
+		scene.STRIKE_CENTER + Vector2(120.0, -180.0),
+		scene.STRIKE_CENTER + Vector2(-80.0, -110.0),
+		scene.STRIKE_CENTER + Vector2(60.0, -40.0),
+	]
+	if not scene.is_invalid_gesture(messy_points):
+		printerr("ASSERT FAIL: messy gesture was not rejected")
+		quit(1)
+		return
+
+	scene.shot_balls.clear()
+	scene.active_ball = {
+		"t": 1.0,
+		"side": 0.0,
+		"pos": scene.STRIKE_CENTER,
+		"spin": 0.0
+	}
+	scene.start_charge(scene.STRIKE_CENTER)
+	scene.add_swipe_point(scene.STRIKE_CENTER + Vector2(0.0, -190.0))
+	scene.gesture_time = scene.MAX_GESTURE_TIME - 0.01
+	scene._process(0.02)
+	if scene.is_charging or scene.shot_balls.is_empty():
+		printerr("ASSERT FAIL: gesture timeout did not auto shoot")
+		quit(1)
+		return
+	scene.shot_balls.clear()
 
 	scene.enemies.append({
 		"id": 1,
@@ -79,6 +108,6 @@ func _initialize() -> void:
 		quit(1)
 		return
 
-	print("ASSERT PASS: audio, 180-degree swipe path, and hit scoring")
+	print("ASSERT PASS: audio, exact path, gesture guard, timeout, and hit scoring")
 	quit(0)
 

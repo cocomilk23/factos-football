@@ -8,6 +8,7 @@ const ENEMY_SPAWN_Y = 250.0
 const SHOT_REVEAL_Y = 1072.0
 const SHOT_REVEAL_DISTANCE = 126.0
 const MAX_CHARGE = 1.25
+const MAX_GESTURE_TIME = 2.0
 const MAX_LIVES = 3
 const WAVE_COUNT = 15
 const PLAYER_KICK_TIME = 0.52
@@ -66,6 +67,7 @@ var shake_amount = 0.0
 
 var is_charging = false
 var charge = 0.0
+var gesture_time = 0.0
 var swipe_points: Array = []
 var skill_dragging = false
 var skill_drag_pos = Vector2.ZERO
@@ -276,6 +278,7 @@ func show_character_select() -> void:
 	skill_fx.clear()
 	is_charging = false
 	charge = 0.0
+	gesture_time = 0.0
 	swipe_points.clear()
 	skill_dragging = false
 	queue_redraw()
@@ -304,6 +307,7 @@ func restart_game() -> void:
 	skill_fx.clear()
 	charge = 0.0
 	is_charging = false
+	gesture_time = 0.0
 	swipe_points.clear()
 	skill_dragging = false
 	player_anim = 0.0
@@ -434,7 +438,10 @@ func handle_primary_drag(pos: Vector2) -> void:
 	if skill_dragging:
 		skill_drag_pos = clamp_skill_target(pos)
 	elif is_charging:
-		add_swipe_point(pos)
+		var added = add_swipe_point(pos)
+		if added and is_invalid_gesture(swipe_points):
+			trim_invalid_gesture_tail()
+			release_shot(Vector2(swipe_points.back()) if not swipe_points.is_empty() else pos)
 
 
 func handle_primary_release(pos: Vector2) -> void:
@@ -534,6 +541,7 @@ func start_charge(pos: Vector2) -> void:
 		return
 	is_charging = true
 	charge = 0.0
+	gesture_time = 0.0
 	swipe_points.clear()
 	add_swipe_point(pos)
 
@@ -542,9 +550,11 @@ func release_shot(pos: Vector2) -> void:
 	if not is_charging:
 		return
 	add_swipe_point(pos)
+	trim_invalid_gesture_tail()
 	is_charging = false
 	var released_charge = charge
 	charge = 0.0
+	gesture_time = 0.0
 
 	if active_ball.is_empty():
 		spawn_feed_ball()
@@ -552,11 +562,82 @@ func release_shot(pos: Vector2) -> void:
 	kick_active_ball(released_charge, 0.86)
 
 
-func add_swipe_point(pos: Vector2) -> void:
-	if swipe_points.is_empty() or Vector2(swipe_points.back()).distance_to(pos) >= 14.0:
+func add_swipe_point(pos: Vector2) -> bool:
+	var added = false
+	if swipe_points.is_empty() or Vector2(swipe_points.back()).distance_to(pos) >= 4.0:
 		swipe_points.append(pos)
-	while swipe_points.size() > 24:
+		added = true
+	while swipe_points.size() > 128:
 		swipe_points.pop_front()
+	return added
+
+
+func trim_invalid_gesture_tail() -> void:
+	while swipe_points.size() > 2 and is_invalid_gesture(swipe_points):
+		swipe_points.pop_back()
+
+
+func is_invalid_gesture(points: Array) -> bool:
+	if points.size() < 5:
+		return false
+
+	var total_len = 0.0
+	var displacement = Vector2(points.back()).distance_to(Vector2(points.front()))
+	var previous_dir = Vector2.ZERO
+	var x_sign = 0
+	var x_flips = 0
+	for i in range(1, points.size()):
+		var segment = Vector2(points[i]) - Vector2(points[i - 1])
+		var segment_len = segment.length()
+		total_len += segment_len
+		if segment_len < 7.0:
+			continue
+		var dir = segment / segment_len
+		if previous_dir != Vector2.ZERO and total_len > 120.0:
+			if previous_dir.dot(dir) < -0.35:
+				return true
+		previous_dir = dir
+
+		if abs(segment.x) > 10.0:
+			var current_sign = 1 if segment.x > 0.0 else -1
+			if x_sign != 0 and current_sign != x_sign:
+				x_flips += 1
+			x_sign = current_sign
+
+	if total_len > 180.0 and displacement < 76.0:
+		return true
+	if total_len > 220.0 and displacement > 1.0 and total_len / displacement > 2.25:
+		return true
+	if total_len > 180.0 and x_flips >= 3:
+		return true
+
+	if has_self_intersection(points):
+		return true
+	return false
+
+
+func has_self_intersection(points: Array) -> bool:
+	if points.size() < 6:
+		return false
+	var a = Vector2(points[points.size() - 2])
+	var b = Vector2(points[points.size() - 1])
+	for i in range(1, points.size() - 3):
+		var c = Vector2(points[i - 1])
+		var d = Vector2(points[i])
+		if segments_intersect(a, b, c, d):
+			return true
+	return false
+
+
+func segments_intersect(a: Vector2, b: Vector2, c: Vector2, d: Vector2) -> bool:
+	var r = b - a
+	var s = d - c
+	var denom = r.cross(s)
+	if abs(denom) < 0.001:
+		return false
+	var t = (c - a).cross(s) / denom
+	var u = (c - a).cross(r) / denom
+	return t > 0.05 and t < 0.95 and u > 0.05 and u < 0.95
 
 
 func _process(delta: float) -> void:
@@ -571,7 +652,11 @@ func _process(delta: float) -> void:
 
 	elapsed += delta
 	if is_charging:
+		gesture_time += delta
 		charge = min(charge + delta, MAX_CHARGE)
+		if gesture_time >= MAX_GESTURE_TIME:
+			var auto_pos = Vector2(swipe_points.back()) if not swipe_points.is_empty() else get_global_mouse_position()
+			release_shot(auto_pos)
 	player_anim = max(player_anim - delta, 0.0)
 	kick_flash_timer = max(kick_flash_timer - delta, 0.0)
 	feedback_timer = max(feedback_timer - delta, 0.0)
@@ -1062,7 +1147,9 @@ func get_aim_x() -> float:
 
 func get_aim_direction() -> Vector2:
 	if swipe_points.size() >= 2:
-		return Vector2(calculate_shot_intent()["dir"])
+		var delta = Vector2(swipe_points.back()) - Vector2(swipe_points.front())
+		if delta.length() >= 1.0:
+			return delta.normalized()
 	var delta = get_global_mouse_position() - STRIKE_CENTER
 	if delta.length() < 24.0:
 		delta = Vector2(0.0, -1.0)
@@ -1082,67 +1169,38 @@ func build_swipe_path(power: float) -> PackedVector2Array:
 			points.append(STRIKE_CENTER.lerp(end, t))
 		return points
 
-	var intent = calculate_shot_intent()
-	var dir = Vector2(intent["dir"])
-	shot_intent_side = dir.x
-	shot_intent_curve = float(intent["curve"])
-
-	var travel = 940.0 + power * 520.0
-	var end = STRIKE_CENTER + dir * travel
-	end.x = clamp(end.x, -260.0, SCREEN_SIZE.x + 260.0)
-	end.y = clamp(end.y, 70.0, STRIKE_CENTER.y - 42.0)
-	var curve_offset = shot_intent_curve * lerp(110.0, 240.0, power)
-
-	for i in range(1, 57):
-		var t = float(i) / 56.0
-		var smooth_t = t * t * (3.0 - 2.0 * t)
-		var p = STRIKE_CENTER.lerp(end, smooth_t)
-		p.x += sin(t * PI) * curve_offset
-		p.y = lerp(STRIKE_CENTER.y, end.y, smooth_t)
-		points.append(p)
+	var origin = Vector2(swipe_points.front())
+	for i in range(1, swipe_points.size()):
+		var p = STRIKE_CENTER + (Vector2(swipe_points[i]) - origin)
+		if points[points.size() - 1].distance_to(p) >= 1.0:
+			points.append(p)
+	if points.size() < 2:
+		points.append(STRIKE_CENTER + Vector2(0.0, -240.0))
+	shot_intent_side = clamp((points[points.size() - 1].x - STRIKE_CENTER.x) / (SCREEN_SIZE.x * 0.5), -1.0, 1.0)
+	shot_intent_curve = estimate_path_curve(points)
 	return points
 
 
-func calculate_shot_intent() -> Dictionary:
-	if swipe_points.size() < 2:
-		return {"dir": Vector2(0.0, -1.0), "curve": 0.0}
-
-	var origin = Vector2(swipe_points.front())
-	var last = Vector2(swipe_points.back())
-	var average = Vector2.ZERO
-	for p in swipe_points:
-		var point = Vector2(p)
-		average += point
-	average /= float(swipe_points.size())
-
-	var drag = last - origin
-	if drag.length() < 36.0:
-		drag = Vector2(0.0, -240.0)
-	elif drag.y > -8.0:
-		if abs(drag.x) > 28.0:
-			drag.y = -max(8.0, abs(drag.x) * 0.08)
-		else:
-			drag = Vector2(0.0, -max(120.0, drag.length()))
-	var dir = drag.normalized()
-	if dir.y > -0.04:
-		dir.y = -0.04
-		dir = dir.normalized()
-
-	var straight_mid_x = (origin.x + last.x) * 0.5
-	var raw_curve = clamp((average.x - straight_mid_x) / 170.0, -1.0, 1.0)
-	var curve = raw_curve
-	if abs(curve) < 0.08:
-		curve = 0.0
-
-	return {"dir": dir, "curve": curve}
-
-
 func estimate_swipe_curve(path: PackedVector2Array) -> float:
-	if swipe_points.size() >= 2:
-		return float(calculate_shot_intent()["curve"])
 	if path.size() < 3:
 		return clamp((path[path.size() - 1].x - STRIKE_CENTER.x) / (SCREEN_SIZE.x * 0.45), -1.0, 1.0)
-	return clamp((path[path.size() - 1].x - STRIKE_CENTER.x) / (SCREEN_SIZE.x * 0.45), -1.0, 1.0)
+	return estimate_path_curve(path)
+
+
+func estimate_path_curve(path: PackedVector2Array) -> float:
+	if path.size() < 3:
+		return 0.0
+	var start = path[0]
+	var end = path[path.size() - 1]
+	var total = max(1.0, float(path.size() - 1))
+	var max_offset = 0.0
+	for i in range(1, path.size() - 1):
+		var t = float(i) / total
+		var straight = start.lerp(end, t)
+		var offset = path[i].x - straight.x
+		if abs(offset) > abs(max_offset):
+			max_offset = offset
+	return clamp(max_offset / 180.0, -1.0, 1.0)
 
 
 func polyline_length(points: PackedVector2Array) -> float:
