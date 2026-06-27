@@ -159,7 +159,7 @@ def process_props(path: Path) -> None:
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     save_background(source("v7_open_arcade_grass_background.png"))
-    process_player_sheet(source("v4_messi_sheet.png"), "messi", True, True)
+    process_player_sheet(source("v4_messi_sheet.png"), "messi", True)
     process_player_sheet(source("v4_ronaldo_sheet.png"), "ronaldo")
     process_player_sheet(source("v4_neymar_sheet.png"), "neymar")
     process_enemies(source("v5_grounded_enemy_sheet.png"))

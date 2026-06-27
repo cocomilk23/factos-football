@@ -2,9 +2,8 @@ extends Node2D
 
 const SCREEN_SIZE = Vector2(720.0, 1280.0)
 const PLAYER_DRAW_CENTER = Vector2(250.0, 1080.0)
-const LAUNCHER_DRAW_CENTER = Vector2(445.0, 1136.0)
-const LAUNCHER_MOUTH = Vector2(445.0, 1082.0)
 const STRIKE_CENTER = Vector2(356.0, 956.0)
+const BALL_ENTRY_CENTER = Vector2(356.0, 1128.0)
 const PERFECT_RADIUS = 32.0
 const HIT_RADIUS = 104.0
 const DANGER_Y = 1084.0
@@ -189,7 +188,7 @@ func restart_game() -> void:
 	perfect_streak = 0
 	focus = 0.0
 	game_over = false
-	feed_timer = 0.25
+	feed_timer = 0.18
 	spawn_timer = 1.2
 	next_enemy_id = 1
 	active_ball.clear()
@@ -362,7 +361,7 @@ func release_shot() -> void:
 			text = "Too Late"
 		register_miss(text)
 		active_ball.clear()
-		feed_timer = 0.5
+		feed_timer = 0.24
 		return
 
 	kick_active_ball(released_charge, quality)
@@ -410,8 +409,8 @@ func update_feed(delta: float) -> void:
 	var end_pos = STRIKE_CENTER + Vector2(side * 22.0, 0.0)
 
 	if t <= 1.0:
-		var a = LAUNCHER_MOUTH
-		var b = LAUNCHER_MOUTH + Vector2(side * 68.0, -146.0)
+		var a = BALL_ENTRY_CENTER + Vector2(side * 64.0, 0.0)
+		var b = STRIKE_CENTER + Vector2(side * 32.0, 104.0)
 		active_ball["pos"] = quadratic_bezier(a, b, end_pos, t)
 	else:
 		var drift = t - 1.0
@@ -419,7 +418,7 @@ func update_feed(delta: float) -> void:
 
 	if t > 1.42:
 		active_ball.clear()
-		feed_timer = max(0.4, 1.0 - elapsed * 0.004 + rng.randf_range(-0.08, 0.12))
+		feed_timer = max(0.22, 0.52 - elapsed * 0.0015 + rng.randf_range(-0.04, 0.08))
 		set_feedback("Missed feed", Color(1.0, 0.72, 0.35))
 		combo = 0
 		perfect_streak = 0
@@ -431,7 +430,7 @@ func spawn_feed_ball() -> void:
 	active_ball = {
 		"t": 0.0,
 		"side": side,
-		"pos": LAUNCHER_MOUTH,
+		"pos": BALL_ENTRY_CENTER + Vector2(side * 64.0, 0.0),
 		"spin": rng.randf_range(0.0, TAU)
 	}
 
@@ -501,7 +500,7 @@ func kick_active_ball(released_charge: float, quality: float) -> void:
 		set_feedback("Scrappy Hit", Color(1.0, 0.75, 0.35))
 
 	active_ball.clear()
-	feed_timer = max(0.34, 0.96 - elapsed * 0.004 + rng.randf_range(-0.1, 0.12))
+	feed_timer = max(0.2, 0.48 - elapsed * 0.0015 + rng.randf_range(-0.05, 0.08))
 	player_anim = PLAYER_KICK_TIME
 	kick_flash_timer = 0.18
 
@@ -926,11 +925,9 @@ func _draw() -> void:
 	if shake_time > 0.0:
 		offset = Vector2(rng.randf_range(-shake_amount, shake_amount), rng.randf_range(-shake_amount, shake_amount))
 	draw_set_transform(offset)
-	draw_feed_path()
 	draw_curve_preview()
 	draw_strike_zone()
 	draw_enemies()
-	draw_launcher()
 	draw_player()
 	draw_balls()
 	draw_skill_effects()
@@ -959,8 +956,10 @@ func draw_feed_path() -> void:
 	var points = PackedVector2Array()
 	for i in range(20):
 		var t = float(i) / 19.0
-		points.append(quadratic_bezier(LAUNCHER_MOUTH, LAUNCHER_MOUTH + Vector2(side * 68.0, -146.0), end_pos, t))
-	draw_polyline(points, Color(0.6, 0.95, 1.0, 0.22), 2.0, true)
+		var a = BALL_ENTRY_CENTER + Vector2(side * 64.0, 0.0)
+		var b = STRIKE_CENTER + Vector2(side * 32.0, 104.0)
+		points.append(quadratic_bezier(a, b, end_pos, t))
+	draw_polyline(points, Color(0.6, 0.95, 1.0, 0.12), 2.0, true)
 
 
 func draw_curve_preview() -> void:
@@ -1015,15 +1014,11 @@ func draw_strike_zone() -> void:
 
 
 func draw_launcher() -> void:
-	var center = LAUNCHER_DRAW_CENTER
-	draw_ellipse_shadow(center + Vector2(0.0, 45.0), Vector2(122.0, 24.0), Color(0, 0, 0, 0.36))
-	draw_tex_fit_center(tex_launcher, center, Vector2(142.0, 118.0))
-	draw_circle(center + Vector2(0.0, 10.0), 8.0 + sin(elapsed * 9.0) * 2.0, Color(0.28, 0.95, 1.0, 0.68))
+	pass
 
 
 func draw_player() -> void:
 	var frames = selected_frames()
-	var profile_id = str(selected_profile().get("id", "messi"))
 	var frame = 0
 	if player_anim > 0.0:
 		var progress = 1.0 - player_anim / PLAYER_KICK_TIME
@@ -1040,16 +1035,7 @@ func draw_player() -> void:
 	var max_size = Vector2(188.0, 238.0)
 	if frame == 2:
 		max_size = Vector2(236.0, 246.0)
-	if profile_id == "messi":
-		if frame == 1:
-			center += Vector2(82.0, 0.0)
-		elif frame == 2:
-			center += Vector2(194.0, 0.0)
-		elif frame == 3:
-			center += Vector2(150.0, 0.0)
 	var shadow_center = PLAYER_DRAW_CENTER + Vector2(12.0, 104.0)
-	if profile_id == "messi" and frame > 0:
-		shadow_center = center + Vector2(0.0, 104.0)
 	draw_ellipse_shadow(shadow_center, Vector2(102.0, 22.0), Color(0, 0, 0, 0.35))
 	if kick_flash_timer > 0.0:
 		draw_circle(STRIKE_CENTER + Vector2(4.0, 12.0), 40.0 * kick_flash_timer / 0.18, Color(1.0, 0.92, 0.25, kick_flash_timer * 2.5))
