@@ -1,0 +1,66 @@
+name: Deploy Web
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download Godot
+        run: |
+          set -eux
+          mkdir -p /tmp/godot
+          curl -L -o /tmp/godot/godot.zip \
+            https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_linux.x86_64.zip
+          unzip -q /tmp/godot/godot.zip -d /tmp/godot
+          chmod +x /tmp/godot/Godot_v4.7-stable_linux.x86_64
+
+      - name: Install export templates
+        run: |
+          set -eux
+          mkdir -p /tmp/godot/templates
+          curl -L -o /tmp/godot/templates.tpz \
+            https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_export_templates.tpz
+          unzip -q /tmp/godot/templates.tpz -d /tmp/godot/templates
+          mkdir -p "$HOME/.local/share/godot/export_templates/4.7.stable"
+          cp -R /tmp/godot/templates/templates/* "$HOME/.local/share/godot/export_templates/4.7.stable/"
+
+      - name: Export Web build
+        run: |
+          set -eux
+          mkdir -p build
+          /tmp/godot/Godot_v4.7-stable_linux.x86_64 --headless --path . --export-release Web build/index.html
+          echo "factos.stylerewrite.xyz" > build/CNAME
+          touch build/.nojekyll
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
