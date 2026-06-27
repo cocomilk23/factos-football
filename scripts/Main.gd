@@ -41,7 +41,6 @@ var combo = 0
 var combo_timer = 0.0
 var perfect_streak = 0
 var focus = 0.0
-var focus_time = 0.0
 var game_over = false
 
 var feed_timer = 0.0
@@ -51,6 +50,7 @@ var enemies: Array = []
 var particles: Array = []
 var impact_fx: Array = []
 var float_texts: Array = []
+var skill_fx: Array = []
 
 var spawn_timer = 0.0
 var next_enemy_id = 1
@@ -120,14 +120,13 @@ func build_character_defs() -> void:
 		{
 			"id": "messi",
 			"name": "MESSI",
-			"role": "Left Arc",
-			"skill": "左脚弧线",
+			"role": "Left Foot",
+			"skill": "Wowo Drop",
 			"power": 0.92,
 			"curve": 1.42,
 			"timing": 1.18,
 			"focus_gain": 1.08,
-			"focus_duration": 5.8,
-			"focus_slow": 0.52,
+			"max_focus": 200.0,
 			"damage": 1.0,
 			"pierce_bonus": 0,
 			"preferred_side": -1.0,
@@ -137,13 +136,12 @@ func build_character_defs() -> void:
 			"id": "ronaldo",
 			"name": "RONALDO",
 			"role": "Power Drive",
-			"skill": "强力穿透",
+			"skill": "Triple Kick",
 			"power": 1.22,
 			"curve": 0.84,
 			"timing": 0.96,
 			"focus_gain": 0.86,
-			"focus_duration": 5.2,
-			"focus_slow": 0.58,
+			"max_focus": 100.0,
 			"damage": 1.35,
 			"pierce_bonus": 1,
 			"preferred_side": 1.0,
@@ -153,20 +151,18 @@ func build_character_defs() -> void:
 			"id": "neymar",
 			"name": "NEYMAR",
 			"role": "Trick Spin",
-			"skill": "花式蓄能",
+			"skill": "Rolling Neymar",
 			"power": 1.0,
 			"curve": 1.2,
 			"timing": 1.05,
 			"focus_gain": 1.42,
-			"focus_duration": 6.8,
-			"focus_slow": 0.46,
+			"max_focus": 100.0,
 			"damage": 1.0,
 			"pierce_bonus": 0,
 			"preferred_side": 0.0,
 			"color": Color(1.0, 0.88, 0.18)
 		}
 	]
-
 
 func show_character_select() -> void:
 	game_mode = "select"
@@ -177,6 +173,7 @@ func show_character_select() -> void:
 	particles.clear()
 	impact_fx.clear()
 	float_texts.clear()
+	skill_fx.clear()
 	is_charging = false
 	charge = 0.0
 	queue_redraw()
@@ -191,10 +188,9 @@ func restart_game() -> void:
 	combo_timer = 0.0
 	perfect_streak = 0
 	focus = 0.0
-	focus_time = 0.0
 	game_over = false
 	feed_timer = 0.25
-	spawn_timer = 0.72
+	spawn_timer = 1.2
 	next_enemy_id = 1
 	active_ball.clear()
 	shot_balls.clear()
@@ -202,6 +198,7 @@ func restart_game() -> void:
 	particles.clear()
 	impact_fx.clear()
 	float_texts.clear()
+	skill_fx.clear()
 	charge = 0.0
 	is_charging = false
 	player_anim = 0.0
@@ -217,6 +214,10 @@ func selected_profile() -> Dictionary:
 	if character_defs.is_empty():
 		return {}
 	return character_defs[selected_character]
+
+
+func focus_capacity() -> float:
+	return float(selected_profile().get("max_focus", MAX_FOCUS))
 
 
 func selected_frames() -> Array:
@@ -282,14 +283,58 @@ func handle_select_input(event: InputEvent) -> void:
 
 
 func activate_focus() -> void:
-	if focus < MAX_FOCUS or focus_time > 0.0:
+	if focus < MAX_FOCUS:
 		return
 	var profile = selected_profile()
-	focus = 0.0
-	focus_time = float(profile.get("focus_duration", 5.5))
-	set_feedback(str(profile.get("role", "FOCUS")) + "!", Color(0.35, 0.95, 1.0))
+	focus -= MAX_FOCUS
+	var id = str(profile.get("id", "messi"))
+	if id == "neymar":
+		use_neymar_skill()
+	elif id == "ronaldo":
+		use_ronaldo_skill()
+	else:
+		use_messi_skill()
+	focus = clamp(focus, 0.0, focus_capacity())
+	set_feedback(str(profile.get("skill", "SKILL")) + "!", Color(0.35, 0.95, 1.0))
 	spawn_burst(STRIKE_CENTER, Color(0.2, 0.95, 1.0), 28)
 	shake(0.12, 4.0)
+
+
+func use_neymar_skill() -> void:
+	skill_fx.append({
+		"type": "neymar_roll",
+		"pos": Vector2(SCREEN_SIZE.x * 0.5, 1110.0),
+		"ttl": 1.45,
+		"age": 0.0,
+		"hit_ids": []
+	})
+
+
+func use_ronaldo_skill() -> void:
+	var centers = [Vector2(205.0, 515.0), Vector2(520.0, 650.0), Vector2(350.0, 805.0)]
+	for i in range(centers.size()):
+		skill_fx.append({
+			"type": "ronaldo_kick",
+			"pos": centers[i],
+			"ttl": 1.05 + float(i) * 0.12,
+			"age": -float(i) * 0.18,
+			"radius": 148.0,
+			"done": false
+		})
+
+
+func use_messi_skill() -> void:
+	var target = get_global_mouse_position()
+	target.x = clamp(target.x, 116.0, SCREEN_SIZE.x - 116.0)
+	target.y = clamp(target.y, 320.0, 880.0)
+	skill_fx.append({
+		"type": "messi_wowo",
+		"pos": target,
+		"ttl": 1.12,
+		"age": 0.0,
+		"radius": 172.0,
+		"done": false
+	})
 
 
 func start_charge() -> void:
@@ -340,12 +385,12 @@ func _process(delta: float) -> void:
 	feedback_timer = max(feedback_timer - delta, 0.0)
 	shake_time = max(shake_time - delta, 0.0)
 	combo_timer = max(combo_timer - delta, 0.0)
-	focus_time = max(focus_time - delta, 0.0)
 	if combo_timer <= 0.0:
 		combo = 0
 
 	update_feed(delta)
 	update_enemies(delta)
+	update_skill_fx(delta)
 	update_shot_balls(delta)
 	update_effects(delta)
 	queue_redraw()
@@ -395,7 +440,7 @@ func kick_active_ball(released_charge: float, quality: float) -> void:
 	var profile = selected_profile()
 	var power = clamp(released_charge / MAX_CHARGE, 0.12, 1.0)
 	var aim_x = get_aim_x()
-	var direction = Vector2(aim_x * 0.42, -1.0).normalized()
+	var direction = get_aim_direction()
 	var timing_factor = lerp(0.74, 1.25, quality)
 	var speed = lerp(500.0, 1050.0, power) * timing_factor * float(profile.get("power", 1.0))
 	if quality < 0.45:
@@ -412,19 +457,14 @@ func kick_active_ball(released_charge: float, quality: float) -> void:
 		curve_accel *= 0.25
 
 	var is_perfect = quality >= 0.82
-	var focus_boost = focus_time > 0.0
 	var kind = "normal"
-	if focus_boost and str(profile.get("id", "")) == "ronaldo":
+	if str(profile.get("id", "")) == "ronaldo" and power >= 0.86:
 		kind = "fire"
-	elif focus_boost or abs(aim_x) >= 0.34:
+	elif abs(aim_x) >= 0.28:
 		kind = "curve"
 
 	var damage = float(profile.get("damage", 1.0))
 	if is_perfect:
-		damage += 1.0
-	if focus_boost:
-		damage += 1.0
-	if str(profile.get("id", "")) == "ronaldo" and focus_boost:
 		damage += 1.0
 
 	var ball = {
@@ -433,7 +473,7 @@ func kick_active_ball(released_charge: float, quality: float) -> void:
 		"accel": Vector2(curve_accel, 0.0),
 		"life": 4.8,
 		"age": 0.0,
-		"radius": 16.0 if focus_boost else 13.5,
+		"radius": 14.0 if is_perfect else 13.0,
 		"trail": [active_ball["pos"]],
 		"spin": float(active_ball.get("spin", 0.0)),
 		"hits": 0,
@@ -442,7 +482,7 @@ func kick_active_ball(released_charge: float, quality: float) -> void:
 		"power": power,
 		"quality": quality,
 		"damage": damage,
-		"pierce_limit": 4 + int(profile.get("pierce_bonus", 0)) if is_perfect or focus_boost else 2 + int(profile.get("pierce_bonus", 0)),
+		"pierce_limit": 4 + int(profile.get("pierce_bonus", 0)) if is_perfect else 2 + int(profile.get("pierce_bonus", 0)),
 		"kind": kind
 	}
 	shot_balls.append(ball)
@@ -450,7 +490,7 @@ func kick_active_ball(released_charge: float, quality: float) -> void:
 	if is_perfect:
 		perfect_streak += 1
 		var focus_gain = (14.0 + perfect_streak * 3.0) * float(profile.get("focus_gain", 1.0))
-		focus = min(MAX_FOCUS, focus + focus_gain)
+		focus = min(focus_capacity(), focus + focus_gain)
 		set_feedback("Perfect x" + str(perfect_streak), Color(0.32, 0.95, 1.0))
 		spawn_burst(Vector2(active_ball["pos"]), Color(0.35, 0.94, 1.0), 18)
 		spawn_impact(Vector2(active_ball["pos"]), 78.0, Color(0.4, 0.95, 1.0))
@@ -494,22 +534,19 @@ func update_enemies(delta: float) -> void:
 	spawn_timer -= delta
 	if spawn_timer <= 0.0:
 		var burst_count = 1
-		if elapsed > 28.0 and rng.randf() < 0.28:
+		if elapsed > 42.0 and rng.randf() < 0.22:
 			burst_count = 2
-		if elapsed > 62.0 and rng.randf() < 0.18:
+		if elapsed > 92.0 and rng.randf() < 0.15:
 			burst_count = 3
 		for i in range(burst_count):
 			spawn_enemy(i, burst_count)
-		var interval = max(0.56, 1.55 - elapsed * 0.008)
+		var interval = max(0.58, 2.1 - elapsed * 0.01)
 		spawn_timer = interval + rng.randf_range(-0.18, 0.16)
 
-	var profile = selected_profile()
 	for i in range(enemies.size() - 1, -1, -1):
 		var enemy = enemies[i]
 		var pos = Vector2(enemy["pos"])
-		var speed = float(enemy["speed"]) + elapsed * 0.34
-		if focus_time > 0.0:
-			speed *= float(profile.get("focus_slow", 0.55))
+		var speed = float(enemy["speed"]) + elapsed * 0.22
 		pos.y += speed * delta
 		var type = int(enemy.get("type", 0))
 		var drift_scale = 12.0 + float(enemy.get("lane_drift", 0.0))
@@ -546,7 +583,7 @@ func spawn_enemy(offset_index: int, burst_count: int) -> void:
 		"id": next_enemy_id,
 		"type": type,
 		"pos": Vector2(clamp(base_x, 58.0, SCREEN_SIZE.x - 58.0), ENEMY_SPAWN_Y + offset_index * 30.0),
-		"speed": float(profile["speed"]) + min(elapsed * 0.34, 38.0),
+		"speed": float(profile["speed"]) + min(elapsed * 0.22, 26.0),
 		"radius": float(profile["radius"]),
 		"hp": float(profile["hp"]),
 		"max_hp": float(profile["hp"]),
@@ -578,16 +615,16 @@ func choose_enemy_type() -> int:
 func enemy_profile(type: int) -> Dictionary:
 	match type:
 		1:
-			return {"hp": 1.0, "speed": 72.0, "radius": 19.0, "score": 130, "lane_drift": 14.0}
+			return {"hp": 1.0, "speed": 56.0, "radius": 19.0, "score": 130, "lane_drift": 14.0}
 		2:
-			return {"hp": 2.0, "speed": 40.0, "radius": 26.0, "score": 175, "lane_drift": 3.0}
+			return {"hp": 2.0, "speed": 34.0, "radius": 26.0, "score": 175, "lane_drift": 3.0}
 		3:
-			return {"hp": 3.0, "speed": 32.0, "radius": 29.0, "score": 250, "lane_drift": 2.0}
+			return {"hp": 3.0, "speed": 27.0, "radius": 29.0, "score": 250, "lane_drift": 2.0}
 		4:
-			return {"hp": 2.0, "speed": 46.0, "radius": 25.0, "score": 190, "lane_drift": 17.0}
+			return {"hp": 2.0, "speed": 38.0, "radius": 25.0, "score": 190, "lane_drift": 17.0}
 		5:
-			return {"hp": 1.0, "speed": 60.0, "radius": 23.0, "score": 330, "lane_drift": 26.0}
-	return {"hp": 1.0, "speed": 48.0, "radius": 23.0, "score": 100, "lane_drift": 6.0}
+			return {"hp": 1.0, "speed": 48.0, "radius": 23.0, "score": 330, "lane_drift": 26.0}
+	return {"hp": 1.0, "speed": 36.0, "radius": 23.0, "score": 100, "lane_drift": 6.0}
 
 
 func update_shot_balls(delta: float) -> void:
@@ -672,7 +709,7 @@ func register_enemy_kill(enemy: Dictionary, ball: Dictionary) -> void:
 	var perfect_bonus = 75 if float(ball.get("quality", 0.0)) >= 0.82 else 0
 	var gained = int(enemy.get("score", 100)) + max(combo - 1, 0) * 40 + curve_bonus + perfect_bonus
 	score += gained
-	focus = min(MAX_FOCUS, focus + (7.0 + combo * 0.8) * float(profile.get("focus_gain", 1.0)))
+	focus = min(focus_capacity(), focus + (7.0 + combo * 0.8) * float(profile.get("focus_gain", 1.0)))
 	float_texts.append({
 		"pos": enemy_pos + Vector2(-24.0, -28.0),
 		"text": "+" + str(gained),
@@ -691,6 +728,74 @@ func register_enemy_kill(enemy: Dictionary, ball: Dictionary) -> void:
 	spawn_burst(enemy_pos, Color(1.0, 0.86, 0.28), 20)
 	spawn_impact(enemy_pos, 62.0, Color(1.0, 0.84, 0.18))
 	shake(0.06, 3.8)
+
+
+func register_skill_kill(enemy: Dictionary, label: String) -> void:
+	var enemy_pos = Vector2(enemy["pos"])
+	var profile = selected_profile()
+	combo += 1
+	combo_timer = 2.6
+	var gained = int(enemy.get("score", 100)) + max(combo - 1, 0) * 45 + 70
+	score += gained
+	focus = min(focus_capacity(), focus + (3.0 + combo * 0.35) * float(profile.get("focus_gain", 1.0)))
+	float_texts.append({
+		"pos": enemy_pos + Vector2(-34.0, -32.0),
+		"text": label,
+		"ttl": 0.72,
+		"color": Color(1.0, 0.9, 0.28),
+		"size": 20
+	})
+	spawn_burst(enemy_pos, Color(1.0, 0.74, 0.18), 18)
+	spawn_impact(enemy_pos, 68.0, Color(1.0, 0.78, 0.18))
+
+
+func update_skill_fx(delta: float) -> void:
+	for i in range(skill_fx.size() - 1, -1, -1):
+		var fx = skill_fx[i]
+		var type = str(fx.get("type", ""))
+		fx["age"] = float(fx.get("age", 0.0)) + delta
+		fx["ttl"] = float(fx.get("ttl", 0.0)) - delta
+
+		if type == "neymar_roll":
+			var pos = Vector2(fx["pos"])
+			pos.y -= 720.0 * delta
+			fx["pos"] = pos
+			var rect = Rect2(pos - Vector2(190.0, 48.0), Vector2(380.0, 96.0))
+			var hit_ids: Array = fx.get("hit_ids", [])
+			for e in range(enemies.size() - 1, -1, -1):
+				var enemy = enemies[e]
+				var enemy_id = int(enemy.get("id", -1))
+				if hit_ids.has(enemy_id):
+					continue
+				if rect.has_point(Vector2(enemy["pos"])):
+					hit_ids.append(enemy_id)
+					enemies.remove_at(e)
+					register_skill_kill(enemy, "ROLL")
+			fx["hit_ids"] = hit_ids
+		elif type == "ronaldo_kick":
+			if float(fx.get("age", 0.0)) >= 0.0 and not bool(fx.get("done", false)):
+				damage_enemies_in_circle(Vector2(fx["pos"]), float(fx.get("radius", 140.0)), "KICK")
+				fx["done"] = true
+				shake(0.12, 7.0)
+		elif type == "messi_wowo":
+			if float(fx.get("age", 0.0)) >= 0.44 and not bool(fx.get("done", false)):
+				damage_enemies_in_circle(Vector2(fx["pos"]), float(fx.get("radius", 160.0)), "WOWO")
+				fx["done"] = true
+				shake(0.18, 9.0)
+
+		if float(fx.get("ttl", 0.0)) <= 0.0:
+			skill_fx.remove_at(i)
+		else:
+			skill_fx[i] = fx
+
+
+func damage_enemies_in_circle(center: Vector2, radius: float, label: String) -> void:
+	for i in range(enemies.size() - 1, -1, -1):
+		var enemy = enemies[i]
+		if center.distance_to(Vector2(enemy["pos"])) <= radius + float(enemy.get("radius", 24.0)):
+			enemies.remove_at(i)
+			register_skill_kill(enemy, label)
+	spawn_impact(center, radius * 1.95, Color(1.0, 0.86, 0.24))
 
 
 func update_effects(delta: float) -> void:
@@ -761,6 +866,15 @@ func get_aim_x() -> float:
 	return clamp((mouse.x - SCREEN_SIZE.x * 0.5) / (SCREEN_SIZE.x * 0.5), -1.0, 1.0)
 
 
+func get_aim_direction() -> Vector2:
+	var delta = get_global_mouse_position() - STRIKE_CENTER
+	if delta.length() < 24.0:
+		delta = Vector2(0.0, -1.0)
+	if delta.y > -18.0:
+		delta.y = -18.0
+	return delta.normalized()
+
+
 func quadratic_bezier(a: Vector2, b: Vector2, c: Vector2, t: float) -> Vector2:
 	var ab = a.lerp(b, t)
 	var bc = b.lerp(c, t)
@@ -819,6 +933,7 @@ func _draw() -> void:
 	draw_launcher()
 	draw_player()
 	draw_balls()
+	draw_skill_effects()
 	draw_effects_layer()
 	draw_set_transform(Vector2.ZERO)
 	draw_ui()
@@ -870,7 +985,7 @@ func draw_curve_preview() -> void:
 func predict_curve_points(power: float, aim_x: float, quality: float) -> PackedVector2Array:
 	var profile = selected_profile()
 	var points = PackedVector2Array()
-	var direction = Vector2(aim_x * 0.42, -1.0).normalized()
+	var direction = get_aim_direction()
 	var speed = lerp(500.0, 1050.0, power) * lerp(0.8, 1.2, quality) * float(profile.get("power", 1.0))
 	var curve_peak = 1.0 - clamp(abs(power - 0.58) / 0.58, 0.0, 1.0) * 0.5
 	var accel = Vector2(aim_x * lerp(520.0, 1500.0, curve_peak) * lerp(0.82, 1.22, quality) * float(profile.get("curve", 1.0)), 0.0)
@@ -938,12 +1053,17 @@ func draw_enemies() -> void:
 		var type = int(enemy.get("type", 0))
 		var wobble = sin(float(enemy["wobble"]) * 7.0) * 2.5
 		var tex = enemy_textures[type] if type >= 0 and type < enemy_textures.size() else null
-		var visual_size = Vector2(r * 3.05, r * 3.26)
+		var depth = clamp((pos.y - ENEMY_SPAWN_Y) / (DANGER_Y - ENEMY_SPAWN_Y), 0.0, 1.0)
+		var depth_scale = lerp(0.78, 1.16, depth)
+		var visual_size = Vector2(r * 3.05, r * 3.26) * depth_scale
 		if type == 3:
 			visual_size *= 1.12
 		if type == 5:
-			draw_circle(pos + Vector2(0.0, wobble), r * 1.65, Color(1.0, 0.88, 0.12, 0.18))
-		draw_ellipse_shadow(pos + Vector2(0.0, r * 1.18), Vector2(r * 2.0, r * 0.42), Color(0, 0, 0, 0.28))
+			draw_circle(pos + Vector2(0.0, wobble), r * 1.65 * depth_scale, Color(1.0, 0.88, 0.12, 0.18))
+		var dust_alpha = 0.18 + depth * 0.12
+		draw_rect(Rect2(pos + Vector2(-r * 0.9, r * 1.15), Vector2(r * 0.55, 3.0)), Color(0.38, 0.3, 0.14, dust_alpha), true)
+		draw_rect(Rect2(pos + Vector2(r * 0.28, r * 1.08), Vector2(r * 0.46, 3.0)), Color(0.38, 0.3, 0.14, dust_alpha * 0.8), true)
+		draw_ellipse_shadow(pos + Vector2(0.0, r * 1.18), Vector2(r * 2.0 * depth_scale, r * 0.42 * depth_scale), Color(0, 0, 0, 0.28))
 		draw_tex_fit_center(tex, pos + Vector2(0.0, wobble), visual_size)
 		var hp = float(enemy.get("hp", 1.0))
 		var max_hp = max(1.0, float(enemy.get("max_hp", 1.0)))
@@ -987,6 +1107,41 @@ func draw_balls() -> void:
 			draw_polyline(points, glow, 8.0, true)
 			draw_polyline(points, Color(1.0, 1.0, 0.76, 0.95), 2.0, true)
 		draw_football_variant(Vector2(ball["pos"]), float(ball.get("radius", 13.0)), float(ball.get("spin", 0.0)), kind, Color.WHITE)
+
+
+func draw_skill_effects() -> void:
+	for fx in skill_fx:
+		var type = str(fx.get("type", ""))
+		var age = float(fx.get("age", 0.0))
+		if type == "neymar_roll":
+			var pos = Vector2(fx["pos"])
+			draw_rect(Rect2(pos - Vector2(190.0, 38.0), Vector2(380.0, 76.0)), Color(0.12, 0.88, 1.0, 0.2), true)
+			draw_polyline(PackedVector2Array([pos + Vector2(-180.0, 44.0), pos + Vector2(180.0, -44.0)]), Color(1.0, 0.96, 0.24, 0.88), 8.0, true)
+			var frames: Array = character_frames.get("neymar", [])
+			if frames.size() > 2:
+				draw_tex_fit_center(frames[2], pos, Vector2(210.0, 132.0))
+			draw_text_shadow(pos + Vector2(-72.0, -58.0), "ROLL", 22, Color(1.0, 0.95, 0.26))
+		elif type == "ronaldo_kick" and age >= 0.0:
+			var pos = Vector2(fx["pos"])
+			var pulse = clamp(age / 0.55, 0.0, 1.0)
+			var radius = float(fx.get("radius", 140.0))
+			draw_circle(pos, radius * pulse, Color(1.0, 0.34, 0.18, 0.16))
+			draw_arc(pos, radius * pulse, -0.2, TAU - 0.2, 72, Color(1.0, 0.72, 0.18, 0.75), 7.0, true)
+			var frames: Array = character_frames.get("ronaldo", [])
+			if frames.size() > 2:
+				draw_tex_fit_center(frames[2], pos + Vector2(-22.0, -70.0), Vector2(190.0, 190.0))
+		elif type == "messi_wowo":
+			var pos = Vector2(fx["pos"])
+			var fall = clamp(age / 0.44, 0.0, 1.0)
+			var bun_pos = pos + Vector2(0.0, -260.0 * (1.0 - fall))
+			var radius = float(fx.get("radius", 160.0))
+			draw_circle(pos, radius, Color(0.3, 0.95, 1.0, 0.08))
+			draw_arc(pos, radius, 0.0, TAU, 96, Color(0.52, 0.94, 1.0, 0.45), 5.0, true)
+			draw_circle(bun_pos, 38.0 + 18.0 * fall, Color(0.92, 0.7, 0.34, 0.95))
+			draw_circle(bun_pos + Vector2(-13.0, -8.0), 8.0, Color(1.0, 0.86, 0.48, 0.95))
+			var frames: Array = character_frames.get("messi", [])
+			if frames.size() > 0:
+				draw_tex_fit_center(frames[0], Vector2(84.0, 1010.0), Vector2(118.0, 142.0))
 
 
 func draw_football_variant(pos: Vector2, radius: float, spin: float, kind: String, tint: Color) -> void:
@@ -1074,19 +1229,22 @@ func draw_meter(rect: Rect2, value: float, color: Color) -> void:
 
 
 func power_color(power: float) -> Color:
-	if focus_time > 0.0:
-		return Color(0.18, 0.88, 1.0, 0.98)
 	return Color(0.18 + power * 0.82, 0.92 - power * 0.28, 0.15, 0.95)
 
 
 func draw_skill_panel() -> void:
-	var focus_ratio = clamp(focus / MAX_FOCUS, 0.0, 1.0)
-	var active = focus_time > 0.0
+	var capacity = focus_capacity()
+	var focus_ratio = clamp(focus / capacity, 0.0, 1.0)
+	var ready = focus >= MAX_FOCUS
 	var rect = Rect2(Vector2(552.0, 1192.0), Vector2(146.0, 56.0))
-	draw_panel(rect, Color(0.02, 0.03, 0.05, 0.78), Color(0.3, 0.95, 1.0, 0.65) if active else Color(1.0, 1.0, 1.0, 0.22))
-	draw_tex_center(tex_slow_icon, rect.position + Vector2(26.0, 28.0), Vector2(38.0, 38.0), Color.WHITE if focus_ratio >= 1.0 or active else Color(0.55, 0.55, 0.55, 0.65))
-	draw_meter(Rect2(rect.position + Vector2(54.0, 30.0), Vector2(80.0, 12.0)), focus_ratio, Color(0.2, 0.9, 1.0, 0.95))
-	draw_text_shadow(rect.position + Vector2(54.0, 24.0), "E", 18, Color.WHITE)
+	draw_panel(rect, Color(0.02, 0.03, 0.05, 0.78), Color(0.3, 0.95, 1.0, 0.65) if ready else Color(1.0, 1.0, 1.0, 0.22))
+	draw_tex_center(tex_slow_icon, rect.position + Vector2(26.0, 28.0), Vector2(38.0, 38.0), Color.WHITE if ready else Color(0.55, 0.55, 0.55, 0.65))
+	var charge_count = int(round(capacity / MAX_FOCUS))
+	for i in range(charge_count):
+		var pip_rect = Rect2(rect.position + Vector2(56.0 + float(i) * 40.0, 30.0), Vector2(32.0, 12.0))
+		var pip_value = clamp((focus - float(i) * MAX_FOCUS) / MAX_FOCUS, 0.0, 1.0)
+		draw_meter(pip_rect, pip_value, Color(0.2, 0.9, 1.0, 0.95))
+	draw_text_shadow(rect.position + Vector2(54.0, 24.0), "E", 18, Color.WHITE if ready else Color(0.7, 0.7, 0.7))
 
 
 func select_card_rect(index: int) -> Rect2:
@@ -1126,3 +1284,4 @@ func stat_bars(value: float, low: float, high: float) -> String:
 	for i in range(5):
 		s += "|" if i < count else "."
 	return s
+
