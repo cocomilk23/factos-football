@@ -1176,9 +1176,27 @@ func build_swipe_path(power: float) -> PackedVector2Array:
 			points.append(p)
 	if points.size() < 2:
 		points.append(STRIKE_CENTER + Vector2(0.0, -240.0))
+	append_path_extension(points, power)
 	shot_intent_side = clamp((points[points.size() - 1].x - STRIKE_CENTER.x) / (SCREEN_SIZE.x * 0.5), -1.0, 1.0)
 	shot_intent_curve = estimate_path_curve(points)
 	return points
+
+
+func append_path_extension(points: PackedVector2Array, power: float) -> void:
+	if points.size() < 2:
+		return
+	var last = points[points.size() - 1]
+	var dir = Vector2.ZERO
+	for i in range(points.size() - 2, -1, -1):
+		var candidate = last - points[i]
+		if candidate.length() >= 18.0:
+			dir = candidate.normalized()
+			break
+	if dir.length() < 0.1:
+		dir = Vector2(0.0, -1.0)
+	var extension = 820.0 + power * 540.0
+	for i in range(1, 25):
+		points.append(last + dir * extension * (float(i) / 24.0))
 
 
 func estimate_swipe_curve(path: PackedVector2Array) -> float:

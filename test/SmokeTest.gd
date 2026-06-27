@@ -19,12 +19,16 @@ func _initialize() -> void:
 		scene.STRIKE_CENTER + Vector2(120.0, -520.0),
 	]
 	var path = scene.build_swipe_path(0.74)
-	if path.size() != 3 or path[0] != scene.STRIKE_CENTER:
+	if path.size() <= 3 or path[0] != scene.STRIKE_CENTER:
 		printerr("ASSERT FAIL: swipe path did not build correctly")
 		quit(1)
 		return
 	if path[1].distance_to(scene.STRIKE_CENTER + Vector2(36.0, -260.0)) > 0.01 or path[2].distance_to(scene.STRIKE_CENTER + Vector2(120.0, -520.0)) > 0.01:
 		printerr("ASSERT FAIL: swipe path did not preserve the drawn gesture")
+		quit(1)
+		return
+	if path[path.size() - 1].y >= path[2].y - 400.0:
+		printerr("ASSERT FAIL: swipe path did not continue beyond the drawn gesture")
 		quit(1)
 		return
 
