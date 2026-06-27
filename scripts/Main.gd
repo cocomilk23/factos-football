@@ -146,7 +146,7 @@ func load_assets() -> void:
 
 func setup_audio() -> void:
 	bgm_player = make_audio_player("res://assets/audio/bgm_loop.wav", -14.0)
-	sfx_kick = make_audio_player("res://assets/audio/kick.wav", -4.0)
+	sfx_kick = make_audio_player("res://music/kick.wav", -4.0)
 	sfx_hit = make_audio_player("res://assets/audio/hit.wav", -5.5)
 	sfx_skill_messi = make_audio_player("res://music/messi_wowo.mp3", -2.5)
 	sfx_skill_ronaldo = make_audio_player("res://music/ronaldo_siu.mp3", -2.5)
@@ -163,7 +163,17 @@ func make_audio_player(path: String, volume: float) -> AudioStreamPlayer:
 
 
 func load_audio_stream(path: String) -> AudioStream:
-	var stream: AudioStream = load(path)
+	var stream: AudioStream = null
+	if path.get_extension().to_lower() == "wav":
+		stream = AudioStreamWAV.load_from_file(path)
+	elif path.get_extension().to_lower() == "mp3":
+		stream = load(path)
+		if stream == null:
+			stream = AudioStreamMP3.load_from_file(path)
+	else:
+		stream = load(path)
+	if stream == null and path.get_extension().to_lower() == "mp3":
+		stream = AudioStreamMP3.load_from_file(path)
 	if stream is AudioStreamWAV and path.find("bgm_loop") >= 0:
 		stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
 	elif stream is AudioStreamMP3 and path.find("bgm") >= 0:
@@ -1051,9 +1061,9 @@ func get_aim_x() -> float:
 
 
 func get_aim_direction() -> Vector2:
-	var delta = get_global_mouse_position() - STRIKE_CENTER
 	if swipe_points.size() >= 2:
-		delta = Vector2(swipe_points.back()) - Vector2(swipe_points.front())
+		return Vector2(calculate_shot_intent()["dir"])
+	var delta = get_global_mouse_position() - STRIKE_CENTER
 	if delta.length() < 24.0:
 		delta = Vector2(0.0, -1.0)
 	if delta.y > -18.0:
@@ -1073,62 +1083,58 @@ func build_swipe_path(power: float) -> PackedVector2Array:
 		return points
 
 	var intent = calculate_shot_intent()
-	shot_intent_side = float(intent["side"])
+	var dir = Vector2(intent["dir"])
+	shot_intent_side = dir.x
 	shot_intent_curve = float(intent["curve"])
 
-	var travel = 940.0 + power * 440.0
-	var end_x = clamp(STRIKE_CENTER.x + shot_intent_side * 370.0, -120.0, SCREEN_SIZE.x + 120.0)
-	var end_y = max(72.0, STRIKE_CENTER.y - travel)
-	var curve_offset = shot_intent_curve * lerp(120.0, 250.0, power)
-	var end = Vector2(end_x, end_y)
+	var travel = 940.0 + power * 520.0
+	var end = STRIKE_CENTER + dir * travel
+	end.x = clamp(end.x, -260.0, SCREEN_SIZE.x + 260.0)
+	end.y = clamp(end.y, 70.0, STRIKE_CENTER.y - 42.0)
+	var curve_offset = shot_intent_curve * lerp(110.0, 240.0, power)
 
 	for i in range(1, 57):
 		var t = float(i) / 56.0
 		var smooth_t = t * t * (3.0 - 2.0 * t)
 		var p = STRIKE_CENTER.lerp(end, smooth_t)
 		p.x += sin(t * PI) * curve_offset
-		p.y = lerp(STRIKE_CENTER.y, end_y, smooth_t)
+		p.y = lerp(STRIKE_CENTER.y, end.y, smooth_t)
 		points.append(p)
 	return points
 
 
 func calculate_shot_intent() -> Dictionary:
 	if swipe_points.size() < 2:
-		return {"side": 0.0, "curve": 0.0}
+		return {"dir": Vector2(0.0, -1.0), "curve": 0.0}
 
 	var origin = Vector2(swipe_points.front())
 	var last = Vector2(swipe_points.back())
-	var highest = last
 	var average = Vector2.ZERO
 	for p in swipe_points:
 		var point = Vector2(p)
 		average += point
-		if point.y < highest.y:
-			highest = point
 	average /= float(swipe_points.size())
 
-	var primary = highest - origin
-	var final = last - origin
-	if primary.y > final.y:
-		primary = final
-	if primary.length() < 36.0:
-		primary = Vector2(0.0, -240.0)
-	if primary.y > -42.0:
-		primary.y = -240.0
+	var drag = last - origin
+	if drag.length() < 36.0:
+		drag = Vector2(0.0, -240.0)
+	elif drag.y > -8.0:
+		if abs(drag.x) > 28.0:
+			drag.y = -max(8.0, abs(drag.x) * 0.08)
+		else:
+			drag = Vector2(0.0, -max(120.0, drag.length()))
+	var dir = drag.normalized()
+	if dir.y > -0.04:
+		dir.y = -0.04
+		dir = dir.normalized()
 
-	var side = clamp((primary.x * 0.75 + final.x * 0.25) / 300.0, -1.0, 1.0)
-	if abs(side) < 0.06:
-		side = 0.0
-
-	var expected_mid_x = origin.x + primary.x * 0.5
-	var raw_curve = clamp((average.x - expected_mid_x) / 230.0, -1.0, 1.0)
-	if abs(raw_curve) < 0.12:
-		raw_curve = side * 0.28
-	var curve = clamp(raw_curve + side * 0.22, -1.0, 1.0)
+	var straight_mid_x = (origin.x + last.x) * 0.5
+	var raw_curve = clamp((average.x - straight_mid_x) / 170.0, -1.0, 1.0)
+	var curve = raw_curve
 	if abs(curve) < 0.08:
 		curve = 0.0
 
-	return {"side": side, "curve": curve}
+	return {"dir": dir, "curve": curve}
 
 
 func estimate_swipe_curve(path: PackedVector2Array) -> float:
@@ -1244,25 +1250,13 @@ func draw_field() -> void:
 
 
 func draw_curve_preview() -> void:
-	if active_ball.is_empty() and not is_charging:
+	if not is_charging:
 		return
 	if is_charging and swipe_points.size() >= 2:
 		var path = build_swipe_path(max(0.2, charge / MAX_CHARGE))
 		draw_polyline(path, Color(0.0, 0.0, 0.0, 0.16), 4.0, true)
 		draw_polyline(path, Color(0.42, 0.95, 1.0, 0.52), 1.8, true)
 		return
-	var aim_x = get_aim_x()
-	var power = clamp(charge / MAX_CHARGE, 0.12, 1.0)
-	var quality = 0.68
-	if not active_ball.is_empty():
-		quality = 0.86
-	var points = predict_curve_points(power, aim_x, quality)
-	var arc_color = Color(0.24, 0.9, 1.0, 0.5)
-	if abs(aim_x) >= 0.34:
-		arc_color = Color(1.0, 0.82, 0.18, 0.58)
-	draw_polyline(points, Color(0.0, 0.0, 0.0, 0.16), 4.0, true)
-	draw_polyline(points, arc_color, 1.8, true)
-	draw_polyline(points, Color(1.0, 1.0, 1.0, 0.62), 0.9, true)
 
 
 func predict_curve_points(power: float, aim_x: float, quality: float) -> PackedVector2Array:

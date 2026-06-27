@@ -29,6 +29,26 @@ func _initialize() -> void:
 			quit(1)
 			return
 
+	scene.swipe_points = [
+		scene.STRIKE_CENTER,
+		scene.STRIKE_CENTER + Vector2(340.0, -12.0),
+	]
+	var right_path = scene.build_swipe_path(0.62)
+	if right_path[right_path.size() - 1].x <= scene.STRIKE_CENTER.x + 220.0:
+		printerr("ASSERT FAIL: flat right shot did not preserve 180-degree range")
+		quit(1)
+		return
+
+	scene.swipe_points = [
+		scene.STRIKE_CENTER,
+		scene.STRIKE_CENTER + Vector2(-340.0, -12.0),
+	]
+	var left_path = scene.build_swipe_path(0.62)
+	if left_path[left_path.size() - 1].x >= scene.STRIKE_CENTER.x - 220.0:
+		printerr("ASSERT FAIL: flat left shot did not preserve 180-degree range")
+		quit(1)
+		return
+
 	scene.enemies.append({
 		"id": 1,
 		"pos": scene.STRIKE_CENTER + Vector2(0.0, -140.0),
@@ -59,6 +79,6 @@ func _initialize() -> void:
 		quit(1)
 		return
 
-	print("ASSERT PASS: swipe path and hit scoring")
+	print("ASSERT PASS: audio, 180-degree swipe path, and hit scoring")
 	quit(0)
 
