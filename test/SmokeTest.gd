@@ -5,15 +5,14 @@ func _initialize() -> void:
 	root.add_child(scene)
 	scene.restart_game()
 
-	scene.active_ball = {
-		"t": 1.0,
-		"side": 0.0,
-		"pos": scene.STRIKE_CENTER,
-		"spin": 0.0
-	}
-	var quality = scene.get_timing_quality(scene.active_ball)
-	if quality < 0.99:
-		printerr("ASSERT FAIL: perfect strike quality was ", quality)
+	scene.swipe_points = [
+		scene.STRIKE_CENTER,
+		scene.STRIKE_CENTER + Vector2(36.0, -260.0),
+		scene.STRIKE_CENTER + Vector2(120.0, -520.0),
+	]
+	var path = scene.build_swipe_path(0.74)
+	if path.size() < 20 or path[0] != scene.STRIKE_CENTER:
+		printerr("ASSERT FAIL: swipe path did not build correctly")
 		quit(1)
 		return
 
@@ -33,7 +32,12 @@ func _initialize() -> void:
 		"radius": 14.0,
 		"trail": [],
 		"spin": 0.0,
-		"hits": 0
+		"hits": 0,
+		"hit_ids": [],
+		"damage": 1.0,
+		"quality": 0.9,
+		"curve": 0.0,
+		"pierce_limit": 2
 	}
 	scene.check_ball_enemy_hits(ball)
 
@@ -42,6 +46,6 @@ func _initialize() -> void:
 		quit(1)
 		return
 
-	print("ASSERT PASS: timing and hit scoring")
+	print("ASSERT PASS: swipe path and hit scoring")
 	quit(0)
 

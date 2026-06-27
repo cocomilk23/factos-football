@@ -100,6 +100,49 @@ def save_asset(img: Image.Image, name: str, max_w: int, max_h: int) -> None:
     resize_fit(trim_alpha(img, 10), max_w, max_h).save(OUT / name)
 
 
+def remove_embedded_ball(img: Image.Image, prefix: str, frame_idx: int) -> Image.Image:
+    cleanup_regions = {
+        "messi": {
+            1: ((42, 0.84), 48),
+            2: ((34, 0.73), 54),
+        },
+        "ronaldo": {
+            1: ((0.62, 0.23), 64),
+            2: ((0.89, 0.45), 68),
+            3: ((0.87, 0.38), 76),
+        },
+        "neymar": {
+            2: ((0.82, 0.42), 66),
+        },
+    }
+    if prefix not in cleanup_regions or frame_idx not in cleanup_regions[prefix]:
+        return img
+    rgba = img.convert("RGBA")
+    px = rgba.load()
+    clear_rgb = px[0, 0][:3]
+    center_spec, radius = cleanup_regions[prefix][frame_idx]
+    if isinstance(center_spec[0], float):
+        center = (int(rgba.width * center_spec[0]), int(rgba.height * center_spec[1]))
+    else:
+        center = (int(center_spec[0]), int(rgba.height * center_spec[1]))
+    cx, cy = center
+    for y in range(max(0, cy - radius), min(rgba.height, cy + radius)):
+        for x in range(max(0, cx - radius), min(rgba.width, cx + radius)):
+            dx = x - cx
+            dy = y - cy
+            if dx * dx + dy * dy > radius * radius:
+                continue
+            r, g, b, a = px[x, y]
+            if a <= 0:
+                continue
+            is_ball_tone = abs(r - g) < 42 and abs(g - b) < 42 and (r > 132 or r < 96)
+            is_black_outline = r < 72 and g < 72 and b < 72
+            is_impact_yellow = r > 170 and g > 105 and b < 95
+            if is_ball_tone or is_black_outline or is_impact_yellow:
+                px[x, y] = (clear_rgb[0], clear_rgb[1], clear_rgb[2], 0)
+    return trim_alpha(rgba, 12)
+
+
 def process_player_sheet(
     path: Path,
     prefix: str,
@@ -126,6 +169,7 @@ def process_player_sheet(
         if flip_x:
             frame = frame.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
         result = resize_fit(frame, 290, 360)
+        result = remove_embedded_ball(result, prefix, out_idx)
         result.save(OUT / f"player_{prefix}_frame_{out_idx}.png")
         if write_legacy:
             result.save(OUT / f"player_frame_{out_idx}.png")

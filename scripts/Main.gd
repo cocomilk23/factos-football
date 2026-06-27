@@ -2,9 +2,11 @@ extends Node2D
 
 const SCREEN_SIZE = Vector2(720.0, 1280.0)
 const PLAYER_DRAW_CENTER = Vector2(294.0, 1084.0)
-const STRIKE_CENTER = Vector2(326.0, 1018.0)
+const STRIKE_CENTER = Vector2(252.0, 1156.0)
 const DANGER_Y = 1084.0
 const ENEMY_SPAWN_Y = 250.0
+const SHOT_REVEAL_Y = 1072.0
+const SHOT_REVEAL_DISTANCE = 126.0
 const MAX_CHARGE = 1.25
 const MAX_LIVES = 3
 const WAVE_COUNT = 15
@@ -28,6 +30,14 @@ var character_defs: Array = []
 var character_frames: Dictionary = {}
 var neymar_roll_frames: Array = []
 var ronaldo_sweep_frames: Array = []
+var bgm_player: AudioStreamPlayer
+var sfx_kick: AudioStreamPlayer
+var sfx_hit: AudioStreamPlayer
+var sfx_skill_messi: AudioStreamPlayer
+var sfx_skill_ronaldo: AudioStreamPlayer
+var sfx_skill_neymar: AudioStreamPlayer
+var sfx_game_over: AudioStreamPlayer
+var audio_unlocked = false
 
 var game_mode = "select"
 var selected_character = 0
@@ -73,6 +83,7 @@ func _ready() -> void:
 	rng.randomize()
 	font = ThemeDB.fallback_font
 	load_assets()
+	setup_audio()
 	build_character_defs()
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	show_character_select()
@@ -131,6 +142,64 @@ func load_assets() -> void:
 	]
 
 
+func setup_audio() -> void:
+	bgm_player = make_audio_player("res://assets/audio/bgm_loop.wav", -14.0)
+	sfx_kick = make_audio_player("res://assets/audio/kick.wav", -4.0)
+	sfx_hit = make_audio_player("res://assets/audio/hit.wav", -5.5)
+	sfx_skill_messi = make_audio_player("res://music/messi_wowo.mp3", -2.5)
+	sfx_skill_ronaldo = make_audio_player("res://music/ronaldo_siu.mp3", -2.5)
+	sfx_skill_neymar = make_audio_player("res://music/neymar.mp3", -3.0)
+	sfx_game_over = make_audio_player("res://assets/audio/game_over.wav", -5.0)
+
+
+func make_audio_player(path: String, volume: float) -> AudioStreamPlayer:
+	var player = AudioStreamPlayer.new()
+	player.stream = load_audio_stream(path)
+	player.volume_db = volume
+	add_child(player)
+	return player
+
+
+func load_audio_stream(path: String) -> AudioStream:
+	var stream: AudioStream = null
+	var ext = path.get_extension().to_lower()
+	if ext == "wav":
+		stream = AudioStreamWAV.load_from_file(path)
+		if stream != null and path.find("bgm_loop") >= 0:
+			stream.loop_mode = 1
+	elif ext == "mp3":
+		stream = AudioStreamMP3.load_from_file(path)
+		if stream != null and path.find("bgm") >= 0:
+			stream.loop = true
+	else:
+		stream = load(path)
+	return stream
+
+
+func unlock_audio() -> void:
+	if audio_unlocked:
+		return
+	audio_unlocked = true
+	update_audio_state()
+
+
+func update_audio_state() -> void:
+	if bgm_player == null or bgm_player.stream == null or not audio_unlocked:
+		return
+	if game_mode == "play" and not game_over:
+		if not bgm_player.playing:
+			bgm_player.play()
+	elif bgm_player.playing:
+		bgm_player.stop()
+
+
+func play_sfx(player: AudioStreamPlayer) -> void:
+	if player == null or player.stream == null or not audio_unlocked:
+		return
+	player.stop()
+	player.play()
+
+
 func build_character_defs() -> void:
 	character_defs = [
 		{
@@ -141,9 +210,9 @@ func build_character_defs() -> void:
 			"power": 0.92,
 			"curve": 1.42,
 			"timing": 1.18,
-			"focus_gain": 0.82,
-			"skill_cost": 170.0,
-			"max_focus": 340.0,
+			"focus_gain": 1.15,
+			"skill_cost": 120.0,
+			"max_focus": 240.0,
 			"damage": 1.0,
 			"pierce_bonus": 0,
 			"preferred_side": -1.0,
@@ -157,9 +226,9 @@ func build_character_defs() -> void:
 			"power": 1.22,
 			"curve": 0.84,
 			"timing": 0.96,
-			"focus_gain": 0.68,
-			"skill_cost": 240.0,
-			"max_focus": 240.0,
+			"focus_gain": 0.95,
+			"skill_cost": 155.0,
+			"max_focus": 155.0,
 			"damage": 1.35,
 			"pierce_bonus": 1,
 			"preferred_side": 1.0,
@@ -173,9 +242,9 @@ func build_character_defs() -> void:
 			"power": 1.0,
 			"curve": 1.2,
 			"timing": 1.05,
-			"focus_gain": 0.78,
-			"skill_cost": 190.0,
-			"max_focus": 190.0,
+			"focus_gain": 1.05,
+			"skill_cost": 130.0,
+			"max_focus": 130.0,
 			"damage": 1.0,
 			"pierce_bonus": 0,
 			"preferred_side": 0.0,
@@ -201,6 +270,7 @@ func show_character_select() -> void:
 
 
 func restart_game() -> void:
+	unlock_audio()
 	game_mode = "play"
 	elapsed = 0.0
 	score = 0
@@ -232,6 +302,7 @@ func restart_game() -> void:
 	feedback_timer = 2.6
 	shake_time = 0.0
 	shake_amount = 0.0
+	update_audio_state()
 	queue_redraw()
 
 
@@ -256,6 +327,13 @@ func selected_frames() -> Array:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed:
+		unlock_audio()
+	elif event is InputEventScreenTouch and event.pressed:
+		unlock_audio()
+	elif event is InputEventKey and event.pressed:
+		unlock_audio()
+
 	if game_mode == "select":
 		handle_select_input(event)
 		return
@@ -373,6 +451,12 @@ func activate_skill_at(target: Vector2) -> void:
 	set_feedback(skill_name + "!", Color(0.35, 0.95, 1.0))
 	show_skill_banner(skill_name, Color(profile.get("color", Color.WHITE)))
 	spawn_burst(STRIKE_CENTER, Color(0.2, 0.95, 1.0), 28)
+	if id == "neymar":
+		play_sfx(sfx_skill_neymar)
+	elif id == "ronaldo":
+		play_sfx(sfx_skill_ronaldo)
+	else:
+		play_sfx(sfx_skill_messi)
 	shake(0.12, 4.0)
 
 
@@ -444,13 +528,14 @@ func release_shot(pos: Vector2) -> void:
 
 
 func add_swipe_point(pos: Vector2) -> void:
-	if swipe_points.is_empty() or Vector2(swipe_points.back()).distance_to(pos) >= 8.0:
+	if swipe_points.is_empty() or Vector2(swipe_points.back()).distance_to(pos) >= 14.0:
 		swipe_points.append(pos)
-	while swipe_points.size() > 34:
+	while swipe_points.size() > 24:
 		swipe_points.pop_front()
 
 
 func _process(delta: float) -> void:
+	update_audio_state()
 	if game_mode == "select":
 		queue_redraw()
 		return
@@ -526,9 +611,10 @@ func kick_active_ball(released_charge: float, quality: float) -> void:
 		"accel": Vector2.ZERO,
 		"life": 4.8,
 		"age": 0.0,
-		"visible_delay": 0.1,
+		"visible": false,
+		"reveal_distance": SHOT_REVEAL_DISTANCE,
 		"radius": 14.0 if is_perfect else 13.0,
-		"trail": [active_ball["pos"]],
+		"trail": [],
 		"spin": float(active_ball.get("spin", 0.0)),
 		"path": path,
 		"path_dist": 0.0,
@@ -547,7 +633,7 @@ func kick_active_ball(released_charge: float, quality: float) -> void:
 
 	if is_perfect:
 		perfect_streak += 1
-		var focus_gain = (4.5 + perfect_streak * 0.9) * float(profile.get("focus_gain", 1.0))
+		var focus_gain = (8.0 + perfect_streak * 1.2) * float(profile.get("focus_gain", 1.0))
 		focus = min(focus_capacity(), focus + focus_gain)
 		set_feedback("Power Curve x" + str(perfect_streak), Color(0.32, 0.95, 1.0))
 		spawn_burst(Vector2(active_ball["pos"]), Color(0.35, 0.94, 1.0), 18)
@@ -559,6 +645,7 @@ func kick_active_ball(released_charge: float, quality: float) -> void:
 	feed_timer = 0.12
 	player_anim = PLAYER_KICK_TIME
 	kick_flash_timer = 0.18
+	play_sfx(sfx_kick)
 
 
 func register_miss(text: String) -> void:
@@ -609,6 +696,7 @@ func update_enemies(delta: float) -> void:
 			if lives <= 0:
 				game_over = true
 				set_feedback("Game Over", Color(1.0, 0.28, 0.24))
+				play_sfx(sfx_game_over)
 
 
 func spawn_enemy(offset_index: int, burst_count: int) -> void:
@@ -689,15 +777,19 @@ func update_shot_balls(delta: float) -> void:
 		ball["spin"] = float(ball["spin"]) + vel.length() * delta * 0.052
 		ball["life"] = float(ball["life"]) - delta
 		ball["age"] = float(ball.get("age", 0.0)) + delta
-		ball["visible_delay"] = max(float(ball.get("visible_delay", 0.0)) - delta, 0.0)
+		if not bool(ball.get("visible", false)):
+			var reveal_distance = float(ball.get("reveal_distance", SHOT_REVEAL_DISTANCE))
+			if float(ball.get("path_dist", 0.0)) >= reveal_distance or pos.y <= SHOT_REVEAL_Y:
+				ball["visible"] = true
+				ball["trail"] = []
 
-		var trail: Array = ball["trail"]
-		trail.append(pos)
-		while trail.size() > 48:
-			trail.pop_front()
-		ball["trail"] = trail
-
-		check_ball_enemy_hits(ball)
+		if bool(ball.get("visible", false)):
+			var trail: Array = ball["trail"]
+			trail.append(pos)
+			while trail.size() > 40:
+				trail.pop_front()
+			ball["trail"] = trail
+			check_ball_enemy_hits(ball)
 
 		var path_done = ball.has("path") and float(ball.get("path_dist", 0.0)) >= float(ball.get("path_len", 0.0))
 		if path_done or float(ball["life"]) <= 0.0 or pos.y < 120.0 or pos.x < -180.0 or pos.x > SCREEN_SIZE.x + 180.0:
@@ -759,7 +851,7 @@ func register_enemy_kill(enemy: Dictionary, ball: Dictionary) -> void:
 	var perfect_bonus = 75 if float(ball.get("quality", 0.0)) >= 0.82 else 0
 	var gained = int(enemy.get("score", 100)) + max(combo - 1, 0) * 40 + curve_bonus + perfect_bonus
 	score += gained
-	focus = min(focus_capacity(), focus + (2.6 + combo * 0.28) * float(profile.get("focus_gain", 1.0)))
+	focus = min(focus_capacity(), focus + (5.0 + combo * 0.55) * float(profile.get("focus_gain", 1.0)))
 	float_texts.append({
 		"pos": enemy_pos + Vector2(-24.0, -28.0),
 		"text": "+" + str(gained),
@@ -777,6 +869,7 @@ func register_enemy_kill(enemy: Dictionary, ball: Dictionary) -> void:
 		})
 	spawn_burst(enemy_pos, Color(1.0, 0.86, 0.28), 20)
 	spawn_impact(enemy_pos, 62.0, Color(1.0, 0.84, 0.18))
+	play_sfx(sfx_hit)
 	shake(0.06, 3.8)
 
 
@@ -787,7 +880,7 @@ func register_skill_kill(enemy: Dictionary, label: String) -> void:
 	combo_timer = 2.6
 	var gained = int(enemy.get("score", 100)) + max(combo - 1, 0) * 45 + 70
 	score += gained
-	focus = min(focus_capacity(), focus + (0.8 + combo * 0.08) * float(profile.get("focus_gain", 1.0)))
+	focus = min(focus_capacity(), focus + (1.2 + combo * 0.12) * float(profile.get("focus_gain", 1.0)))
 	float_texts.append({
 		"pos": enemy_pos + Vector2(-34.0, -32.0),
 		"text": label,
@@ -962,22 +1055,47 @@ func build_swipe_path(power: float) -> PackedVector2Array:
 		return points
 
 	var origin = Vector2(swipe_points.front())
-	for i in range(1, swipe_points.size()):
-		var delta = (Vector2(swipe_points[i]) - origin) * 1.18
-		var p = STRIKE_CENTER + delta
-		p.x = clamp(p.x, -90.0, SCREEN_SIZE.x + 90.0)
-		p.y = clamp(p.y, 110.0, STRIKE_CENTER.y - 18.0)
-		if points[points.size() - 1].distance_to(p) >= 10.0:
-			points.append(p)
+	var raw_end = Vector2(swipe_points.back())
+	var end_delta = (raw_end - origin) * 1.16
+	if end_delta.length() < 48.0:
+		end_delta = Vector2(0.0, -420.0)
+	if end_delta.y > -84.0:
+		end_delta.y = -84.0
+	var end = STRIKE_CENTER + end_delta
+	end.x = clamp(end.x, -96.0, SCREEN_SIZE.x + 96.0)
+	end.y = clamp(end.y, 116.0, DANGER_Y - 18.0)
 
-	if points.size() < 2:
-		points.append(STRIKE_CENTER + Vector2(0.0, -820.0))
-	var last = points[points.size() - 1]
-	var previous = points[max(points.size() - 2, 0)]
-	var dir = (last - previous).normalized()
+	var mid_sum = Vector2.ZERO
+	var mid_count = 0
+	for i in range(1, max(2, swipe_points.size() - 1)):
+		mid_sum += Vector2(swipe_points[i])
+		mid_count += 1
+	var raw_mid = origin.lerp(raw_end, 0.5)
+	if mid_count > 0:
+		raw_mid = mid_sum / float(mid_count)
+
+	var straight_mid = STRIKE_CENTER.lerp(end, 0.48)
+	var raw_mid_delta = (raw_mid - origin) * 1.16
+	var raw_control = STRIKE_CENTER + raw_mid_delta
+	var lateral = clamp(raw_control.x - straight_mid.x, -220.0, 220.0)
+	if abs(lateral) < 18.0:
+		lateral = 0.0
+	var lift = lerp(72.0, 132.0, power)
+	var control = straight_mid + Vector2(lateral, -lift)
+	control.x = clamp(control.x, -116.0, SCREEN_SIZE.x + 116.0)
+	control.y = clamp(control.y, 160.0, STRIKE_CENTER.y - 96.0)
+
+	for i in range(1, 31):
+		var t = float(i) / 30.0
+		points.append(quadratic_bezier(STRIKE_CENTER, control, end, t))
+
+	var dir = (points[points.size() - 1] - points[points.size() - 3]).normalized()
 	if dir.length() < 0.1 or dir.y > -0.05:
 		dir = get_aim_direction()
-	points.append(last + dir * (680.0 + power * 500.0))
+	var extension = 640.0 + power * 480.0
+	var tail_start = points[points.size() - 1]
+	for i in range(1, 13):
+		points.append(tail_start + dir * extension * (float(i) / 12.0))
 	return points
 
 
@@ -1095,10 +1213,10 @@ func draw_curve_preview() -> void:
 		return
 	if is_charging and swipe_points.size() >= 2:
 		var path = build_swipe_path(max(0.2, charge / MAX_CHARGE))
-		draw_polyline(path, Color(0.0, 0.0, 0.0, 0.2), 6.0, true)
-		draw_polyline(path, Color(0.42, 0.95, 1.0, 0.58), 3.0, true)
-		for i in range(2, path.size(), 3):
-			draw_circle(path[i], 2.5, Color(1.0, 1.0, 1.0, 0.66))
+		draw_polyline(path, Color(0.0, 0.0, 0.0, 0.16), 4.0, true)
+		draw_polyline(path, Color(0.42, 0.95, 1.0, 0.52), 1.8, true)
+		for i in range(4, path.size(), 6):
+			draw_circle(path[i], 2.0, Color(1.0, 1.0, 1.0, 0.58))
 		return
 	var aim_x = get_aim_x()
 	var power = clamp(charge / MAX_CHARGE, 0.12, 1.0)
@@ -1109,11 +1227,11 @@ func draw_curve_preview() -> void:
 	var arc_color = Color(0.24, 0.9, 1.0, 0.5)
 	if abs(aim_x) >= 0.34:
 		arc_color = Color(1.0, 0.82, 0.18, 0.58)
-	draw_polyline(points, Color(0.0, 0.0, 0.0, 0.2), 6.0, true)
-	draw_polyline(points, arc_color, 3.0, true)
-	draw_polyline(points, Color(1.0, 1.0, 1.0, 0.72), 1.4, true)
+	draw_polyline(points, Color(0.0, 0.0, 0.0, 0.16), 4.0, true)
+	draw_polyline(points, arc_color, 1.8, true)
+	draw_polyline(points, Color(1.0, 1.0, 1.0, 0.62), 0.9, true)
 	for i in range(3, points.size(), 8):
-		draw_circle(points[i], 3.5, arc_color)
+		draw_circle(points[i], 2.4, arc_color)
 
 
 func predict_curve_points(power: float, aim_x: float, quality: float) -> PackedVector2Array:
@@ -1211,7 +1329,7 @@ func draw_balls() -> void:
 	if not active_ball.is_empty() and player_anim <= 0.0:
 		draw_football_variant(Vector2(active_ball["pos"]), 13.0, float(active_ball.get("spin", 0.0)), "normal", Color.WHITE)
 	for ball in shot_balls:
-		if float(ball.get("visible_delay", 0.0)) > 0.0:
+		if not bool(ball.get("visible", false)):
 			continue
 		var trail: Array = ball["trail"]
 		var kind = str(ball.get("kind", "normal"))
@@ -1224,9 +1342,9 @@ func draw_balls() -> void:
 				glow = Color(0.16, 0.9, 1.0, 0.62)
 			elif kind == "fire":
 				glow = Color(1.0, 0.36, 0.08, 0.66)
-			draw_polyline(points, Color(0, 0, 0, 0.22), 8.0, true)
-			draw_polyline(points, glow, 4.5, true)
-			draw_polyline(points, Color(1.0, 1.0, 0.76, 0.86), 1.3, true)
+			draw_polyline(points, Color(0, 0, 0, 0.18), 5.0, true)
+			draw_polyline(points, glow, 2.8, true)
+			draw_polyline(points, Color(1.0, 1.0, 0.76, 0.76), 0.9, true)
 		draw_football_variant(Vector2(ball["pos"]), float(ball.get("radius", 13.0)), float(ball.get("spin", 0.0)), kind, Color.WHITE)
 
 
