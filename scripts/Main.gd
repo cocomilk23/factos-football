@@ -3,12 +3,8 @@ extends Node2D
 const SCREEN_SIZE = Vector2(720.0, 1280.0)
 const PLAYER_DRAW_CENTER = Vector2(250.0, 1080.0)
 const STRIKE_CENTER = Vector2(356.0, 956.0)
-const BALL_ENTRY_CENTER = Vector2(356.0, 1128.0)
-const PERFECT_RADIUS = 32.0
-const HIT_RADIUS = 104.0
 const DANGER_Y = 1084.0
 const ENEMY_SPAWN_Y = 250.0
-const FEED_DURATION = 1.12
 const MAX_CHARGE = 1.25
 const MAX_LIVES = 3
 const WAVE_COUNT = 15
@@ -18,7 +14,6 @@ const MAX_FOCUS = 100.0
 var rng = RandomNumberGenerator.new()
 var font: Font
 var tex_field: Texture2D
-var tex_launcher: Texture2D
 var tex_ball: Texture2D
 var tex_curve_ball: Texture2D
 var tex_fire_ball: Texture2D
@@ -27,9 +22,12 @@ var tex_heart: Texture2D
 var tex_curve_icon: Texture2D
 var tex_pierce_icon: Texture2D
 var tex_slow_icon: Texture2D
+var tex_wowo: Texture2D
 var enemy_textures: Array = []
 var character_defs: Array = []
 var character_frames: Dictionary = {}
+var neymar_roll_frames: Array = []
+var ronaldo_sweep_frames: Array = []
 
 var game_mode = "select"
 var selected_character = 0
@@ -58,10 +56,17 @@ var shake_amount = 0.0
 
 var is_charging = false
 var charge = 0.0
+var swipe_points: Array = []
+var skill_dragging = false
+var skill_drag_pos = Vector2.ZERO
 var player_anim = 0.0
 var kick_flash_timer = 0.0
 var last_feedback = ""
 var feedback_timer = 0.0
+var skill_banner_text = ""
+var skill_banner_timer = 0.0
+var skill_banner_age = 0.0
+var skill_banner_color = Color.WHITE
 
 
 func _ready() -> void:
@@ -75,7 +80,6 @@ func _ready() -> void:
 
 func load_assets() -> void:
 	tex_field = load("res://assets/img/stadium_field.png")
-	tex_launcher = load("res://assets/img/launcher.png")
 	tex_ball = load("res://assets/img/ball_projectile.png")
 	tex_curve_ball = load("res://assets/img/curve_ball.png")
 	tex_fire_ball = load("res://assets/img/fireball_projectile.png")
@@ -84,6 +88,7 @@ func load_assets() -> void:
 	tex_curve_icon = load("res://assets/img/curve_icon.png")
 	tex_pierce_icon = load("res://assets/img/pierce_icon.png")
 	tex_slow_icon = load("res://assets/img/slow_icon.png")
+	tex_wowo = load("res://assets/img/skill_wowo.png")
 	character_frames = {
 		"messi": [
 			load("res://assets/img/player_messi_frame_0.png"),
@@ -112,6 +117,18 @@ func load_assets() -> void:
 		load("res://assets/img/enemy_4.png"),
 		load("res://assets/img/enemy_5.png")
 	]
+	neymar_roll_frames = [
+		load("res://assets/img/skill_neymar_roll_0.png"),
+		load("res://assets/img/skill_neymar_roll_1.png"),
+		load("res://assets/img/skill_neymar_roll_2.png"),
+		load("res://assets/img/skill_neymar_roll_3.png")
+	]
+	ronaldo_sweep_frames = [
+		load("res://assets/img/skill_ronaldo_sweep_0.png"),
+		load("res://assets/img/skill_ronaldo_sweep_1.png"),
+		load("res://assets/img/skill_ronaldo_sweep_2.png"),
+		load("res://assets/img/skill_ronaldo_sweep_3.png")
+	]
 
 
 func build_character_defs() -> void:
@@ -120,7 +137,7 @@ func build_character_defs() -> void:
 			"id": "messi",
 			"name": "MESSI",
 			"role": "Left Foot",
-			"skill": "Wowo Drop",
+			"skill": "给你俩窝窝",
 			"power": 0.92,
 			"curve": 1.42,
 			"timing": 1.18,
@@ -135,7 +152,7 @@ func build_character_defs() -> void:
 			"id": "ronaldo",
 			"name": "RONALDO",
 			"role": "Power Drive",
-			"skill": "Triple Kick",
+			"skill": "罗三脚",
 			"power": 1.22,
 			"curve": 0.84,
 			"timing": 0.96,
@@ -150,7 +167,7 @@ func build_character_defs() -> void:
 			"id": "neymar",
 			"name": "NEYMAR",
 			"role": "Trick Spin",
-			"skill": "Rolling Neymar",
+			"skill": "马尔翻滚",
 			"power": 1.0,
 			"curve": 1.2,
 			"timing": 1.05,
@@ -175,6 +192,8 @@ func show_character_select() -> void:
 	skill_fx.clear()
 	is_charging = false
 	charge = 0.0
+	swipe_points.clear()
+	skill_dragging = false
 	queue_redraw()
 
 
@@ -200,8 +219,12 @@ func restart_game() -> void:
 	skill_fx.clear()
 	charge = 0.0
 	is_charging = false
+	swipe_points.clear()
+	skill_dragging = false
 	player_anim = 0.0
 	kick_flash_timer = 0.0
+	skill_banner_timer = 0.0
+	skill_banner_age = 0.0
 	last_feedback = "Time the feed ball"
 	feedback_timer = 2.6
 	shake_time = 0.0
@@ -243,23 +266,32 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 
 	if event.is_action_pressed("skill"):
-		activate_focus()
+		activate_skill_at(get_global_mouse_position())
 		return
 
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
-		activate_focus()
+		activate_skill_at(get_global_mouse_position())
 		return
 
 	if event.is_action_pressed("shoot"):
-		start_charge()
+		start_charge(get_global_mouse_position())
 	elif event.is_action_released("shoot"):
-		release_shot()
+		release_shot(get_global_mouse_position())
 
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
-			start_charge()
+			handle_primary_press(event.position)
 		else:
-			release_shot()
+			handle_primary_release(event.position)
+	elif event is InputEventMouseMotion:
+		handle_primary_drag(event.position)
+	elif event is InputEventScreenTouch:
+		if event.pressed:
+			handle_primary_press(event.position)
+		else:
+			handle_primary_release(event.position)
+	elif event is InputEventScreenDrag:
+		handle_primary_drag(event.position)
 
 
 func handle_select_input(event: InputEvent) -> void:
@@ -281,51 +313,95 @@ func handle_select_input(event: InputEvent) -> void:
 			restart_game()
 
 
+func handle_primary_press(pos: Vector2) -> void:
+	if focus >= MAX_FOCUS and skill_panel_rect().has_point(pos):
+		begin_skill_drag(pos)
+		return
+	start_charge(pos)
+
+
+func handle_primary_drag(pos: Vector2) -> void:
+	if skill_dragging:
+		skill_drag_pos = clamp_skill_target(pos)
+	elif is_charging:
+		add_swipe_point(pos)
+
+
+func handle_primary_release(pos: Vector2) -> void:
+	if skill_dragging:
+		finish_skill_drag(pos)
+		return
+	release_shot(pos)
+
+
+func begin_skill_drag(pos: Vector2) -> void:
+	skill_dragging = true
+	skill_drag_pos = clamp_skill_target(pos)
+
+
+func finish_skill_drag(pos: Vector2) -> void:
+	skill_dragging = false
+	activate_skill_at(pos)
+
+
 func activate_focus() -> void:
+	activate_skill_at(get_global_mouse_position())
+
+
+func activate_skill_at(target: Vector2) -> void:
 	if focus < MAX_FOCUS:
 		return
 	var profile = selected_profile()
 	focus -= MAX_FOCUS
 	var id = str(profile.get("id", "messi"))
 	if id == "neymar":
-		use_neymar_skill()
+		use_neymar_skill(target)
 	elif id == "ronaldo":
-		use_ronaldo_skill()
+		use_ronaldo_skill(target)
 	else:
-		use_messi_skill()
+		use_messi_skill(target)
 	focus = clamp(focus, 0.0, focus_capacity())
-	set_feedback(str(profile.get("skill", "SKILL")) + "!", Color(0.35, 0.95, 1.0))
+	var skill_name = str(profile.get("skill", "SKILL"))
+	set_feedback(skill_name + "!", Color(0.35, 0.95, 1.0))
+	show_skill_banner(skill_name, Color(profile.get("color", Color.WHITE)))
 	spawn_burst(STRIKE_CENTER, Color(0.2, 0.95, 1.0), 28)
 	shake(0.12, 4.0)
 
 
-func use_neymar_skill() -> void:
+func use_neymar_skill(target: Vector2) -> void:
+	var lane_x = clamp(target.x, 190.0, SCREEN_SIZE.x - 190.0)
 	skill_fx.append({
 		"type": "neymar_roll",
-		"pos": Vector2(SCREEN_SIZE.x * 0.5, 1110.0),
+		"pos": Vector2(lane_x, 1110.0),
 		"ttl": 1.45,
 		"age": 0.0,
 		"hit_ids": []
 	})
 
 
-func use_ronaldo_skill() -> void:
-	var centers = [Vector2(205.0, 515.0), Vector2(520.0, 650.0), Vector2(350.0, 805.0)]
-	for i in range(centers.size()):
+func use_ronaldo_skill(target: Vector2) -> void:
+	var target_x = clamp(target.x, 130.0, SCREEN_SIZE.x - 130.0)
+	var lane_targets = [
+		Vector2(clamp(target_x - 135.0, 110.0, SCREEN_SIZE.x - 110.0), 540.0),
+		Vector2(target_x, 685.0),
+		Vector2(clamp(target_x + 135.0, 110.0, SCREEN_SIZE.x - 110.0), 830.0)
+	]
+	for i in range(lane_targets.size()):
 		skill_fx.append({
-			"type": "ronaldo_kick",
-			"pos": centers[i],
-			"ttl": 1.05 + float(i) * 0.12,
+			"type": "ronaldo_sweep",
+			"start": Vector2(260.0, 990.0),
+			"end": lane_targets[i],
+			"pos": Vector2(260.0, 990.0),
+			"ttl": 1.16 + float(i) * 0.12,
 			"age": -float(i) * 0.18,
-			"radius": 148.0,
-			"done": false
+			"radius": 126.0,
+			"frame": i + 1,
+			"hit_ids": []
 		})
 
 
-func use_messi_skill() -> void:
-	var target = get_global_mouse_position()
-	target.x = clamp(target.x, 116.0, SCREEN_SIZE.x - 116.0)
-	target.y = clamp(target.y, 320.0, 880.0)
+func use_messi_skill(target: Vector2) -> void:
+	target = clamp_skill_target(target)
 	skill_fx.append({
 		"type": "messi_wowo",
 		"pos": target,
@@ -336,35 +412,34 @@ func use_messi_skill() -> void:
 	})
 
 
-func start_charge() -> void:
+func start_charge(pos: Vector2) -> void:
 	if is_charging:
 		return
 	is_charging = true
 	charge = 0.0
+	swipe_points.clear()
+	add_swipe_point(pos)
 
 
-func release_shot() -> void:
+func release_shot(pos: Vector2) -> void:
 	if not is_charging:
 		return
+	add_swipe_point(pos)
 	is_charging = false
 	var released_charge = charge
 	charge = 0.0
 
 	if active_ball.is_empty():
-		register_miss("No ball")
-		return
+		spawn_feed_ball()
 
-	var quality = get_timing_quality(active_ball)
-	if quality <= 0.05:
-		var text = "Too Early"
-		if float(active_ball.get("t", 0.0)) > 1.02:
-			text = "Too Late"
-		register_miss(text)
-		active_ball.clear()
-		feed_timer = 0.24
-		return
+	kick_active_ball(released_charge, 0.86)
 
-	kick_active_ball(released_charge, quality)
+
+func add_swipe_point(pos: Vector2) -> void:
+	if swipe_points.is_empty() or Vector2(swipe_points.back()).distance_to(pos) >= 8.0:
+		swipe_points.append(pos)
+	while swipe_points.size() > 34:
+		swipe_points.pop_front()
 
 
 func _process(delta: float) -> void:
@@ -382,6 +457,9 @@ func _process(delta: float) -> void:
 	player_anim = max(player_anim - delta, 0.0)
 	kick_flash_timer = max(kick_flash_timer - delta, 0.0)
 	feedback_timer = max(feedback_timer - delta, 0.0)
+	if skill_banner_timer > 0.0:
+		skill_banner_timer = max(skill_banner_timer - delta, 0.0)
+		skill_banner_age += delta
 	shake_time = max(shake_time - delta, 0.0)
 	combo_timer = max(combo_timer - delta, 0.0)
 	if combo_timer <= 0.0:
@@ -402,64 +480,32 @@ func update_feed(delta: float) -> void:
 			spawn_feed_ball()
 		return
 
-	active_ball["t"] = float(active_ball["t"]) + delta / FEED_DURATION
 	active_ball["spin"] = float(active_ball.get("spin", 0.0)) + delta * 10.0
-	var t = float(active_ball["t"])
-	var side = float(active_ball["side"])
-	var end_pos = STRIKE_CENTER + Vector2(side * 22.0, 0.0)
-
-	if t <= 1.0:
-		var a = BALL_ENTRY_CENTER + Vector2(side * 64.0, 0.0)
-		var b = STRIKE_CENTER + Vector2(side * 32.0, 104.0)
-		active_ball["pos"] = quadratic_bezier(a, b, end_pos, t)
-	else:
-		var drift = t - 1.0
-		active_ball["pos"] = end_pos + Vector2(side * 70.0, 145.0) * drift
-
-	if t > 1.42:
-		active_ball.clear()
-		feed_timer = max(0.22, 0.52 - elapsed * 0.0015 + rng.randf_range(-0.04, 0.08))
-		set_feedback("Missed feed", Color(1.0, 0.72, 0.35))
-		combo = 0
-		perfect_streak = 0
+	active_ball["pos"] = STRIKE_CENTER
 
 
 func spawn_feed_ball() -> void:
-	var side_options = [-1.0, -0.62, -0.24, 0.0, 0.24, 0.62, 1.0]
-	var side = side_options[rng.randi_range(0, side_options.size() - 1)]
 	active_ball = {
-		"t": 0.0,
-		"side": side,
-		"pos": BALL_ENTRY_CENTER + Vector2(side * 64.0, 0.0),
+		"t": 1.0,
+		"side": 0.0,
+		"pos": STRIKE_CENTER,
 		"spin": rng.randf_range(0.0, TAU)
 	}
 
 
 func kick_active_ball(released_charge: float, quality: float) -> void:
 	var profile = selected_profile()
-	var power = clamp(released_charge / MAX_CHARGE, 0.12, 1.0)
-	var aim_x = get_aim_x()
-	var direction = get_aim_direction()
-	var timing_factor = lerp(0.74, 1.25, quality)
-	var speed = lerp(500.0, 1050.0, power) * timing_factor * float(profile.get("power", 1.0))
-	if quality < 0.45:
-		direction = direction.rotated(rng.randf_range(-0.22, 0.22))
-		speed *= 0.78
+	var power = clamp(released_charge / MAX_CHARGE, 0.18, 1.0)
+	var path = build_swipe_path(power)
+	var path_len = max(1.0, polyline_length(path))
+	var aim_x = estimate_swipe_curve(path)
+	var speed = lerp(620.0, 1120.0, power) * float(profile.get("power", 1.0))
 
-	var curve_peak = 1.0 - clamp(abs(power - 0.58) / 0.58, 0.0, 1.0) * 0.5
-	var curve_mult = float(profile.get("curve", 1.0))
-	var preferred = float(profile.get("preferred_side", 0.0))
-	if preferred != 0.0 and sign(aim_x) == sign(preferred):
-		curve_mult *= 1.12
-	var curve_accel = aim_x * lerp(520.0, 1500.0, curve_peak) * lerp(0.82, 1.22, quality) * curve_mult
-	if abs(aim_x) < 0.08:
-		curve_accel *= 0.25
-
-	var is_perfect = quality >= 0.82
+	var is_perfect = power >= 0.82 and swipe_points.size() >= 5
 	var kind = "normal"
 	if str(profile.get("id", "")) == "ronaldo" and power >= 0.86:
 		kind = "fire"
-	elif abs(aim_x) >= 0.28:
+	elif abs(aim_x) >= 0.18:
 		kind = "curve"
 
 	var damage = float(profile.get("damage", 1.0))
@@ -468,13 +514,17 @@ func kick_active_ball(released_charge: float, quality: float) -> void:
 
 	var ball = {
 		"pos": active_ball["pos"],
-		"vel": direction * speed,
-		"accel": Vector2(curve_accel, 0.0),
+		"vel": get_aim_direction() * speed,
+		"accel": Vector2.ZERO,
 		"life": 4.8,
 		"age": 0.0,
 		"radius": 14.0 if is_perfect else 13.0,
 		"trail": [active_ball["pos"]],
 		"spin": float(active_ball.get("spin", 0.0)),
+		"path": path,
+		"path_dist": 0.0,
+		"path_len": path_len,
+		"path_speed": speed,
 		"hits": 0,
 		"hit_ids": [],
 		"curve": aim_x,
@@ -490,17 +540,14 @@ func kick_active_ball(released_charge: float, quality: float) -> void:
 		perfect_streak += 1
 		var focus_gain = (14.0 + perfect_streak * 3.0) * float(profile.get("focus_gain", 1.0))
 		focus = min(focus_capacity(), focus + focus_gain)
-		set_feedback("Perfect x" + str(perfect_streak), Color(0.32, 0.95, 1.0))
+		set_feedback("Power Curve x" + str(perfect_streak), Color(0.32, 0.95, 1.0))
 		spawn_burst(Vector2(active_ball["pos"]), Color(0.35, 0.94, 1.0), 18)
 		spawn_impact(Vector2(active_ball["pos"]), 78.0, Color(0.4, 0.95, 1.0))
-	elif quality >= 0.45:
-		set_feedback("Good Volley", Color(0.78, 1.0, 0.45))
 	else:
-		perfect_streak = 0
-		set_feedback("Scrappy Hit", Color(1.0, 0.75, 0.35))
+		set_feedback("Swipe Shot", Color(0.78, 1.0, 0.45))
 
 	active_ball.clear()
-	feed_timer = max(0.2, 0.48 - elapsed * 0.0015 + rng.randf_range(-0.05, 0.08))
+	feed_timer = 0.12
 	player_anim = PLAYER_KICK_TIME
 	kick_flash_timer = 0.18
 
@@ -512,21 +559,6 @@ func register_miss(text: String) -> void:
 	shake(0.08, 3.0)
 	if not active_ball.is_empty():
 		spawn_burst(Vector2(active_ball["pos"]), Color(1.0, 0.45, 0.28), 8)
-
-
-func get_timing_quality(ball: Dictionary) -> float:
-	var profile = selected_profile()
-	var timing = float(profile.get("timing", 1.0))
-	var perfect_radius = PERFECT_RADIUS * timing
-	var hit_radius = HIT_RADIUS * timing
-	var pos = Vector2(ball["pos"])
-	var dist = pos.distance_to(STRIKE_CENTER)
-	if dist > hit_radius:
-		return 0.0
-	if dist <= perfect_radius:
-		return 1.0
-	var ratio = 1.0 - ((dist - perfect_radius) / (hit_radius - perfect_radius))
-	return clamp(0.3 + ratio * 0.65, 0.0, 1.0)
 
 
 func update_enemies(delta: float) -> void:
@@ -631,10 +663,18 @@ func update_shot_balls(delta: float) -> void:
 		var ball = shot_balls[i]
 		var pos = Vector2(ball["pos"])
 		var vel = Vector2(ball["vel"])
-		var accel = Vector2(ball["accel"])
-		vel += accel * delta
-		pos += vel * delta
-		vel *= pow(0.991, delta * 60.0)
+		if ball.has("path"):
+			var old_pos = pos
+			var path_points: PackedVector2Array = ball["path"]
+			var path_dist = float(ball.get("path_dist", 0.0)) + float(ball.get("path_speed", 860.0)) * delta
+			pos = point_on_polyline(path_points, path_dist)
+			vel = (pos - old_pos) / max(delta, 0.001)
+			ball["path_dist"] = path_dist
+		else:
+			var accel = Vector2(ball["accel"])
+			vel += accel * delta
+			pos += vel * delta
+			vel *= pow(0.991, delta * 60.0)
 		ball["pos"] = pos
 		ball["vel"] = vel
 		ball["spin"] = float(ball["spin"]) + vel.length() * delta * 0.052
@@ -649,7 +689,8 @@ func update_shot_balls(delta: float) -> void:
 
 		check_ball_enemy_hits(ball)
 
-		if float(ball["life"]) <= 0.0 or pos.y < 150.0 or pos.x < -160.0 or pos.x > SCREEN_SIZE.x + 160.0:
+		var path_done = ball.has("path") and float(ball.get("path_dist", 0.0)) >= float(ball.get("path_len", 0.0))
+		if path_done or float(ball["life"]) <= 0.0 or pos.y < 120.0 or pos.x < -180.0 or pos.x > SCREEN_SIZE.x + 180.0:
 			shot_balls.remove_at(i)
 		else:
 			shot_balls[i] = ball
@@ -771,11 +812,28 @@ func update_skill_fx(delta: float) -> void:
 					enemies.remove_at(e)
 					register_skill_kill(enemy, "ROLL")
 			fx["hit_ids"] = hit_ids
-		elif type == "ronaldo_kick":
-			if float(fx.get("age", 0.0)) >= 0.0 and not bool(fx.get("done", false)):
-				damage_enemies_in_circle(Vector2(fx["pos"]), float(fx.get("radius", 140.0)), "KICK")
-				fx["done"] = true
-				shake(0.12, 7.0)
+		elif type == "ronaldo_sweep":
+			var age = float(fx.get("age", 0.0))
+			if age >= 0.0:
+				var start = Vector2(fx["start"])
+				var end = Vector2(fx["end"])
+				var p = clamp(age / 0.72, 0.0, 1.0)
+				p = 1.0 - pow(1.0 - p, 2.0)
+				var pos = start.lerp(end, p)
+				fx["pos"] = pos
+				var hit_ids: Array = fx.get("hit_ids", [])
+				for e in range(enemies.size() - 1, -1, -1):
+					var enemy = enemies[e]
+					var enemy_id = int(enemy.get("id", -1))
+					if hit_ids.has(enemy_id):
+						continue
+					if pos.distance_to(Vector2(enemy["pos"])) <= float(fx.get("radius", 126.0)) + float(enemy.get("radius", 24.0)):
+						hit_ids.append(enemy_id)
+						enemies.remove_at(e)
+						register_skill_kill(enemy, "KICK")
+				fx["hit_ids"] = hit_ids
+				if age < delta:
+					shake(0.1, 6.0)
 		elif type == "messi_wowo":
 			if float(fx.get("age", 0.0)) >= 0.44 and not bool(fx.get("done", false)):
 				damage_enemies_in_circle(Vector2(fx["pos"]), float(fx.get("radius", 160.0)), "WOWO")
@@ -855,23 +913,97 @@ func set_feedback(text: String, color: Color) -> void:
 	feedback_timer = 1.25
 
 
+func show_skill_banner(text: String, color: Color) -> void:
+	skill_banner_text = text
+	skill_banner_color = color
+	skill_banner_timer = 1.15
+	skill_banner_age = 0.0
+
+
 func shake(duration: float, amount: float) -> void:
 	shake_time = max(shake_time, duration)
 	shake_amount = max(shake_amount, amount)
 
 
 func get_aim_x() -> float:
+	if is_charging and swipe_points.size() >= 2:
+		return estimate_swipe_curve(build_swipe_path(max(0.2, charge / MAX_CHARGE)))
 	var mouse = get_global_mouse_position()
 	return clamp((mouse.x - SCREEN_SIZE.x * 0.5) / (SCREEN_SIZE.x * 0.5), -1.0, 1.0)
 
 
 func get_aim_direction() -> Vector2:
 	var delta = get_global_mouse_position() - STRIKE_CENTER
+	if swipe_points.size() >= 2:
+		delta = Vector2(swipe_points.back()) - Vector2(swipe_points.front())
 	if delta.length() < 24.0:
 		delta = Vector2(0.0, -1.0)
 	if delta.y > -18.0:
 		delta.y = -18.0
 	return delta.normalized()
+
+
+func build_swipe_path(power: float) -> PackedVector2Array:
+	var points = PackedVector2Array()
+	points.append(STRIKE_CENTER)
+	if swipe_points.size() < 2:
+		var dir = get_aim_direction()
+		points.append(STRIKE_CENTER + dir * (760.0 + power * 420.0))
+		return points
+
+	var origin = Vector2(swipe_points.front())
+	for i in range(1, swipe_points.size()):
+		var delta = (Vector2(swipe_points[i]) - origin) * 1.18
+		var p = STRIKE_CENTER + delta
+		p.x = clamp(p.x, -90.0, SCREEN_SIZE.x + 90.0)
+		p.y = clamp(p.y, 110.0, STRIKE_CENTER.y - 18.0)
+		if points[points.size() - 1].distance_to(p) >= 10.0:
+			points.append(p)
+
+	if points.size() < 2:
+		points.append(STRIKE_CENTER + Vector2(0.0, -820.0))
+	var last = points[points.size() - 1]
+	var previous = points[max(points.size() - 2, 0)]
+	var dir = (last - previous).normalized()
+	if dir.length() < 0.1 or dir.y > -0.05:
+		dir = get_aim_direction()
+	points.append(last + dir * (680.0 + power * 500.0))
+	return points
+
+
+func estimate_swipe_curve(path: PackedVector2Array) -> float:
+	if path.size() < 3:
+		return clamp((path[path.size() - 1].x - STRIKE_CENTER.x) / (SCREEN_SIZE.x * 0.45), -1.0, 1.0)
+	var start = path[0]
+	var end = path[path.size() - 1]
+	var mid = path[int(path.size() / 2)]
+	var straight_mid = start.lerp(end, 0.5)
+	return clamp((mid.x - straight_mid.x) / (SCREEN_SIZE.x * 0.32), -1.0, 1.0)
+
+
+func polyline_length(points: PackedVector2Array) -> float:
+	var length = 0.0
+	for i in range(1, points.size()):
+		length += points[i - 1].distance_to(points[i])
+	return length
+
+
+func point_on_polyline(points: PackedVector2Array, distance: float) -> Vector2:
+	if points.is_empty():
+		return STRIKE_CENTER
+	var remaining = distance
+	for i in range(1, points.size()):
+		var a = points[i - 1]
+		var b = points[i]
+		var segment = a.distance_to(b)
+		if remaining <= segment:
+			return a.lerp(b, remaining / max(segment, 0.001))
+		remaining -= segment
+	return points[points.size() - 1]
+
+
+func clamp_skill_target(pos: Vector2) -> Vector2:
+	return Vector2(clamp(pos.x, 116.0, SCREEN_SIZE.x - 116.0), clamp(pos.y, 300.0, 910.0))
 
 
 func quadratic_bezier(a: Vector2, b: Vector2, c: Vector2, t: float) -> Vector2:
@@ -948,35 +1080,28 @@ func draw_field() -> void:
 		draw_line(Vector2(x, DANGER_Y), Vector2(x + 22.0, DANGER_Y), Color(1.0, 0.22, 0.16, 0.58), 3.0)
 
 
-func draw_feed_path() -> void:
-	var side = 0.0
-	if not active_ball.is_empty():
-		side = float(active_ball.get("side", 0.0))
-	var end_pos = STRIKE_CENTER + Vector2(side * 22.0, 0.0)
-	var points = PackedVector2Array()
-	for i in range(20):
-		var t = float(i) / 19.0
-		var a = BALL_ENTRY_CENTER + Vector2(side * 64.0, 0.0)
-		var b = STRIKE_CENTER + Vector2(side * 32.0, 104.0)
-		points.append(quadratic_bezier(a, b, end_pos, t))
-	draw_polyline(points, Color(0.6, 0.95, 1.0, 0.12), 2.0, true)
-
-
 func draw_curve_preview() -> void:
 	if active_ball.is_empty() and not is_charging:
+		return
+	if is_charging and swipe_points.size() >= 2:
+		var path = build_swipe_path(max(0.2, charge / MAX_CHARGE))
+		draw_polyline(path, Color(0.0, 0.0, 0.0, 0.2), 6.0, true)
+		draw_polyline(path, Color(0.42, 0.95, 1.0, 0.58), 3.0, true)
+		for i in range(2, path.size(), 3):
+			draw_circle(path[i], 2.5, Color(1.0, 1.0, 1.0, 0.66))
 		return
 	var aim_x = get_aim_x()
 	var power = clamp(charge / MAX_CHARGE, 0.12, 1.0)
 	var quality = 0.68
 	if not active_ball.is_empty():
-		quality = max(0.35, get_timing_quality(active_ball))
+		quality = 0.86
 	var points = predict_curve_points(power, aim_x, quality)
 	var arc_color = Color(0.24, 0.9, 1.0, 0.5)
 	if abs(aim_x) >= 0.34:
 		arc_color = Color(1.0, 0.82, 0.18, 0.58)
-	draw_polyline(points, Color(0.0, 0.0, 0.0, 0.24), 12.0, true)
-	draw_polyline(points, arc_color, 6.0, true)
-	draw_polyline(points, Color(1.0, 1.0, 1.0, 0.82), 2.0, true)
+	draw_polyline(points, Color(0.0, 0.0, 0.0, 0.2), 6.0, true)
+	draw_polyline(points, arc_color, 3.0, true)
+	draw_polyline(points, Color(1.0, 1.0, 1.0, 0.72), 1.4, true)
 	for i in range(3, points.size(), 8):
 		draw_circle(points[i], 3.5, arc_color)
 
@@ -999,22 +1124,9 @@ func predict_curve_points(power: float, aim_x: float, quality: float) -> PackedV
 
 
 func draw_strike_zone() -> void:
-	var profile = selected_profile()
-	var timing = float(profile.get("timing", 1.0))
-	var quality = 0.0
-	if not active_ball.is_empty():
-		quality = get_timing_quality(active_ball)
 	var pulse = 1.0 + sin(elapsed * 8.0) * 0.04
-	var outer_color = Color(0.22, 0.95, 1.0, 0.35 if quality > 0.0 else 0.18)
-	var perfect_color = Color(1.0, 0.95, 0.22, 0.46 if quality >= 0.82 else 0.22)
-	draw_arc(STRIKE_CENTER, HIT_RADIUS * timing * pulse, 0.0, TAU, 96, outer_color, 4.0, true)
-	draw_arc(STRIKE_CENTER, PERFECT_RADIUS * timing * pulse, 0.0, TAU, 64, perfect_color, 5.0, true)
-	draw_line(STRIKE_CENTER + Vector2(-16.0, 0.0), STRIKE_CENTER + Vector2(16.0, 0.0), Color(1.0, 1.0, 1.0, 0.38), 2.0)
-	draw_line(STRIKE_CENTER + Vector2(0.0, -16.0), STRIKE_CENTER + Vector2(0.0, 16.0), Color(1.0, 1.0, 1.0, 0.38), 2.0)
-
-
-func draw_launcher() -> void:
-	pass
+	draw_ellipse_shadow(STRIKE_CENTER + Vector2(0.0, 18.0), Vector2(92.0 * pulse, 22.0 * pulse), Color(0.0, 0.0, 0.0, 0.24))
+	draw_arc(STRIKE_CENTER, 42.0 * pulse, 0.0, TAU, 64, Color(0.25, 0.95, 1.0, 0.24), 2.5, true)
 
 
 func draw_player() -> void:
@@ -1100,9 +1212,9 @@ func draw_balls() -> void:
 				glow = Color(0.16, 0.9, 1.0, 0.62)
 			elif kind == "fire":
 				glow = Color(1.0, 0.36, 0.08, 0.66)
-			draw_polyline(points, Color(0, 0, 0, 0.24), 13.0, true)
-			draw_polyline(points, glow, 8.0, true)
-			draw_polyline(points, Color(1.0, 1.0, 0.76, 0.95), 2.0, true)
+			draw_polyline(points, Color(0, 0, 0, 0.22), 8.0, true)
+			draw_polyline(points, glow, 4.5, true)
+			draw_polyline(points, Color(1.0, 1.0, 0.76, 0.86), 1.3, true)
 		draw_football_variant(Vector2(ball["pos"]), float(ball.get("radius", 13.0)), float(ball.get("spin", 0.0)), kind, Color.WHITE)
 
 
@@ -1113,20 +1225,19 @@ func draw_skill_effects() -> void:
 		if type == "neymar_roll":
 			var pos = Vector2(fx["pos"])
 			draw_rect(Rect2(pos - Vector2(190.0, 38.0), Vector2(380.0, 76.0)), Color(0.12, 0.88, 1.0, 0.2), true)
-			draw_polyline(PackedVector2Array([pos + Vector2(-180.0, 44.0), pos + Vector2(180.0, -44.0)]), Color(1.0, 0.96, 0.24, 0.88), 8.0, true)
-			var frames: Array = character_frames.get("neymar", [])
-			if frames.size() > 2:
-				draw_tex_fit_center(frames[2], pos, Vector2(210.0, 132.0))
+			draw_polyline(PackedVector2Array([pos + Vector2(-180.0, 42.0), pos + Vector2(180.0, -42.0)]), Color(1.0, 0.96, 0.24, 0.7), 5.0, true)
+			var frame = int(age * 12.0) % max(neymar_roll_frames.size(), 1)
+			if frame < neymar_roll_frames.size():
+				draw_tex_fit_center(neymar_roll_frames[frame], pos, Vector2(250.0, 150.0))
 			draw_text_shadow(pos + Vector2(-72.0, -58.0), "ROLL", 22, Color(1.0, 0.95, 0.26))
-		elif type == "ronaldo_kick" and age >= 0.0:
+		elif type == "ronaldo_sweep" and age >= 0.0:
 			var pos = Vector2(fx["pos"])
-			var pulse = clamp(age / 0.55, 0.0, 1.0)
 			var radius = float(fx.get("radius", 140.0))
-			draw_circle(pos, radius * pulse, Color(1.0, 0.34, 0.18, 0.16))
-			draw_arc(pos, radius * pulse, -0.2, TAU - 0.2, 72, Color(1.0, 0.72, 0.18, 0.75), 7.0, true)
-			var frames: Array = character_frames.get("ronaldo", [])
-			if frames.size() > 2:
-				draw_tex_fit_center(frames[2], pos + Vector2(-22.0, -70.0), Vector2(190.0, 190.0))
+			draw_circle(pos, radius, Color(1.0, 0.24, 0.12, 0.1))
+			draw_arc(pos, radius, -0.4, PI * 1.35, 48, Color(1.0, 0.72, 0.18, 0.58), 5.0, true)
+			var frame = clamp(int(fx.get("frame", 1)), 0, ronaldo_sweep_frames.size() - 1)
+			if frame >= 0 and frame < ronaldo_sweep_frames.size():
+				draw_tex_fit_center(ronaldo_sweep_frames[frame], pos + Vector2(-28.0, -36.0), Vector2(270.0, 172.0))
 		elif type == "messi_wowo":
 			var pos = Vector2(fx["pos"])
 			var fall = clamp(age / 0.44, 0.0, 1.0)
@@ -1134,11 +1245,38 @@ func draw_skill_effects() -> void:
 			var radius = float(fx.get("radius", 160.0))
 			draw_circle(pos, radius, Color(0.3, 0.95, 1.0, 0.08))
 			draw_arc(pos, radius, 0.0, TAU, 96, Color(0.52, 0.94, 1.0, 0.45), 5.0, true)
-			draw_circle(bun_pos, 38.0 + 18.0 * fall, Color(0.92, 0.7, 0.34, 0.95))
-			draw_circle(bun_pos + Vector2(-13.0, -8.0), 8.0, Color(1.0, 0.86, 0.48, 0.95))
+			draw_tex_fit_center(tex_wowo, bun_pos, Vector2(118.0 + 46.0 * fall, 118.0 + 46.0 * fall))
 			var frames: Array = character_frames.get("messi", [])
 			if frames.size() > 0:
 				draw_tex_fit_center(frames[0], Vector2(84.0, 1010.0), Vector2(118.0, 142.0))
+
+	draw_skill_drag_preview()
+
+
+func draw_skill_drag_preview() -> void:
+	if not skill_dragging:
+		return
+	var profile = selected_profile()
+	var id = str(profile.get("id", "messi"))
+	var pos = clamp_skill_target(skill_drag_pos)
+	if id == "messi":
+		draw_circle(pos, 172.0, Color(0.3, 0.95, 1.0, 0.1))
+		draw_arc(pos, 172.0, 0.0, TAU, 96, Color(0.6, 0.96, 1.0, 0.46), 4.0, true)
+		draw_tex_fit_center(tex_wowo, pos, Vector2(120.0, 120.0), Color(1.0, 1.0, 1.0, 0.62))
+	elif id == "neymar":
+		var rect = Rect2(Vector2(pos.x - 190.0, 250.0), Vector2(380.0, 860.0))
+		draw_rect(rect, Color(0.1, 0.88, 1.0, 0.12), true)
+		draw_rect(rect, Color(0.35, 0.95, 1.0, 0.5), false, 3.0)
+		if not neymar_roll_frames.is_empty():
+			draw_tex_fit_center(neymar_roll_frames[0], Vector2(pos.x, 1060.0), Vector2(250.0, 150.0), Color(1.0, 1.0, 1.0, 0.62))
+	else:
+		for i in range(3):
+			var p = Vector2(clamp(pos.x + (float(i) - 1.0) * 135.0, 110.0, SCREEN_SIZE.x - 110.0), 540.0 + float(i) * 145.0)
+			draw_circle(p, 126.0, Color(1.0, 0.26, 0.1, 0.12))
+			draw_arc(p, 126.0, -0.4, PI * 1.35, 48, Color(1.0, 0.72, 0.18, 0.52), 4.0, true)
+			var frame = min(i + 1, ronaldo_sweep_frames.size() - 1)
+			if frame >= 0 and frame < ronaldo_sweep_frames.size():
+				draw_tex_fit_center(ronaldo_sweep_frames[frame], p + Vector2(-22.0, -34.0), Vector2(240.0, 152.0), Color(1.0, 1.0, 1.0, 0.58))
 
 
 func draw_football_variant(pos: Vector2, radius: float, spin: float, kind: String, tint: Color) -> void:
@@ -1217,6 +1355,20 @@ func draw_ui() -> void:
 		draw_text_shadow(Vector2(188.0, 520.0), "GAME OVER", 48, Color(1.0, 0.28, 0.24))
 		draw_text_shadow(Vector2(212.0, 590.0), "Final Score: " + str(score), 26, Color.WHITE)
 		draw_text_shadow(Vector2(150.0, 650.0), "Tap to choose again", 26, Color(0.8, 0.94, 1.0))
+	draw_skill_banner()
+
+
+func draw_skill_banner() -> void:
+	if skill_banner_timer <= 0.0:
+		return
+	var t = clamp(skill_banner_age / 1.15, 0.0, 1.0)
+	var alpha = sin(t * PI)
+	var c = skill_banner_color
+	c.a = alpha
+	var y = 420.0 - 28.0 * alpha
+	draw_rect(Rect2(Vector2(0.0, y - 54.0), Vector2(SCREEN_SIZE.x, 104.0)), Color(0.0, 0.0, 0.0, 0.38 * alpha), true)
+	draw_text_shadow(Vector2(96.0, y + 18.0), skill_banner_text, 48, c, Color(0.0, 0.0, 0.0, 0.92 * alpha))
+	draw_text_shadow(Vector2(112.0, y + 55.0), "SPECIAL MOVE", 20, Color(1.0, 0.92, 0.25, 0.9 * alpha))
 
 
 func draw_meter(rect: Rect2, value: float, color: Color) -> void:
@@ -1233,7 +1385,7 @@ func draw_skill_panel() -> void:
 	var capacity = focus_capacity()
 	var focus_ratio = clamp(focus / capacity, 0.0, 1.0)
 	var ready = focus >= MAX_FOCUS
-	var rect = Rect2(Vector2(552.0, 1192.0), Vector2(146.0, 56.0))
+	var rect = skill_panel_rect()
 	draw_panel(rect, Color(0.02, 0.03, 0.05, 0.78), Color(0.3, 0.95, 1.0, 0.65) if ready else Color(1.0, 1.0, 1.0, 0.22))
 	draw_tex_center(tex_slow_icon, rect.position + Vector2(26.0, 28.0), Vector2(38.0, 38.0), Color.WHITE if ready else Color(0.55, 0.55, 0.55, 0.65))
 	var charge_count = int(round(capacity / MAX_FOCUS))
@@ -1241,7 +1393,11 @@ func draw_skill_panel() -> void:
 		var pip_rect = Rect2(rect.position + Vector2(56.0 + float(i) * 40.0, 30.0), Vector2(32.0, 12.0))
 		var pip_value = clamp((focus - float(i) * MAX_FOCUS) / MAX_FOCUS, 0.0, 1.0)
 		draw_meter(pip_rect, pip_value, Color(0.2, 0.9, 1.0, 0.95))
-	draw_text_shadow(rect.position + Vector2(54.0, 24.0), "E", 18, Color.WHITE if ready else Color(0.7, 0.7, 0.7))
+	draw_text_shadow(rect.position + Vector2(54.0, 24.0), "DRAG", 16, Color.WHITE if ready else Color(0.7, 0.7, 0.7))
+
+
+func skill_panel_rect() -> Rect2:
+	return Rect2(Vector2(552.0, 1192.0), Vector2(146.0, 56.0))
 
 
 func select_card_rect(index: int) -> Rect2:

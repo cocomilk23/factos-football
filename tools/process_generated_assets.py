@@ -100,27 +100,36 @@ def save_asset(img: Image.Image, name: str, max_w: int, max_h: int) -> None:
     resize_fit(trim_alpha(img, 10), max_w, max_h).save(OUT / name)
 
 
-def process_player_sheet(path: Path, prefix: str, write_legacy: bool = False, flip_x: bool = False) -> None:
+def process_player_sheet(
+    path: Path,
+    prefix: str,
+    write_legacy: bool = False,
+    flip_x: bool = False,
+    key: tuple[int, int, int] = (0, 255, 0),
+    order: list[int] | None = None,
+) -> None:
     img = Image.open(path).convert("RGBA")
     cell_w = img.width // 4
     h = img.height
+    frame_order = order if order is not None else [0, 1, 2, 3]
     crop_boxes = [
         (0, 70, int(cell_w * 0.92), h - 30),
         (0, 70, int(cell_w * 0.96), h - 30),
         (0, 70, int(cell_w * 0.98), h - 30),
         (0, 70, int(cell_w * 0.98), h - 30),
     ]
-    for idx, box in enumerate(crop_boxes):
-        cell = img.crop((idx * cell_w, 0, (idx + 1) * cell_w, h))
+    for out_idx, source_idx in enumerate(frame_order):
+        box = crop_boxes[source_idx]
+        cell = img.crop((source_idx * cell_w, 0, (source_idx + 1) * cell_w, h))
         cropped = cell.crop(box)
-        frame = trim_alpha(alpha_from_key(cropped, (0, 255, 0), 130), 12)
+        frame = trim_alpha(alpha_from_key(cropped, key, 130), 12)
         if flip_x:
             frame = frame.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
         result = resize_fit(frame, 290, 360)
-        result.save(OUT / f"player_{prefix}_frame_{idx}.png")
+        result.save(OUT / f"player_{prefix}_frame_{out_idx}.png")
         if write_legacy:
-            result.save(OUT / f"player_frame_{idx}.png")
-            if idx == 0:
+            result.save(OUT / f"player_frame_{out_idx}.png")
+            if out_idx == 0:
                 result.save(OUT / "player_volley.png")
 
 
@@ -156,14 +165,36 @@ def process_props(path: Path) -> None:
     processed["slow_icon.png"].save(OUT / "fireball_icon.png")
 
 
+def process_skill_sheet(path: Path, prefix: str, max_w: int, max_h: int) -> None:
+    for idx, cell in enumerate(split_grid(path, 1, 4)):
+        frame = trim_alpha(alpha_from_key(cell, (255, 0, 255), 115), 12)
+        resize_fit(frame, max_w, max_h).save(OUT / f"skill_{prefix}_{idx}.png")
+
+
+def process_single_skill(path: Path, name: str, max_w: int, max_h: int) -> None:
+    img = Image.open(path).convert("RGBA")
+    asset = trim_alpha(alpha_from_key(img, (255, 0, 255), 115), 12)
+    resize_fit(asset, max_w, max_h).save(OUT / name)
+
+
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     save_background(source("v7_open_arcade_grass_background.png"))
-    process_player_sheet(source("v4_messi_sheet.png"), "messi", True)
+    process_player_sheet(
+        source("v9_messi_correct_left_reference_sheet.png"),
+        "messi",
+        True,
+        False,
+        (255, 0, 255),
+        [3, 2, 1, 0],
+    )
     process_player_sheet(source("v4_ronaldo_sheet.png"), "ronaldo")
     process_player_sheet(source("v4_neymar_sheet.png"), "neymar")
     process_enemies(source("v5_grounded_enemy_sheet.png"))
     process_props(source("v3_pixel_prop_sheet.png"))
+    process_single_skill(source("v8_wowo_tou_skill.png"), "skill_wowo.png", 220, 220)
+    process_skill_sheet(source("v8_neymar_ground_roll_sheet.png"), "neymar_roll", 320, 150)
+    process_skill_sheet(source("v10_ronaldo_red_player_sweep_sheet.png"), "ronaldo_sweep", 360, 220)
 
 
 if __name__ == "__main__":
