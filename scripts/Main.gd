@@ -1,8 +1,8 @@
 extends Node2D
 
 const SCREEN_SIZE = Vector2(720.0, 1280.0)
-const PLAYER_DRAW_CENTER = Vector2(250.0, 1080.0)
-const STRIKE_CENTER = Vector2(356.0, 956.0)
+const PLAYER_DRAW_CENTER = Vector2(294.0, 1084.0)
+const STRIKE_CENTER = Vector2(326.0, 1018.0)
 const DANGER_Y = 1084.0
 const ENEMY_SPAWN_Y = 250.0
 const MAX_CHARGE = 1.25
@@ -141,8 +141,9 @@ func build_character_defs() -> void:
 			"power": 0.92,
 			"curve": 1.42,
 			"timing": 1.18,
-			"focus_gain": 1.08,
-			"max_focus": 200.0,
+			"focus_gain": 0.82,
+			"skill_cost": 170.0,
+			"max_focus": 340.0,
 			"damage": 1.0,
 			"pierce_bonus": 0,
 			"preferred_side": -1.0,
@@ -156,8 +157,9 @@ func build_character_defs() -> void:
 			"power": 1.22,
 			"curve": 0.84,
 			"timing": 0.96,
-			"focus_gain": 0.86,
-			"max_focus": 100.0,
+			"focus_gain": 0.68,
+			"skill_cost": 240.0,
+			"max_focus": 240.0,
 			"damage": 1.35,
 			"pierce_bonus": 1,
 			"preferred_side": 1.0,
@@ -171,8 +173,9 @@ func build_character_defs() -> void:
 			"power": 1.0,
 			"curve": 1.2,
 			"timing": 1.05,
-			"focus_gain": 1.42,
-			"max_focus": 100.0,
+			"focus_gain": 0.78,
+			"skill_cost": 190.0,
+			"max_focus": 190.0,
 			"damage": 1.0,
 			"pierce_bonus": 0,
 			"preferred_side": 0.0,
@@ -240,6 +243,10 @@ func selected_profile() -> Dictionary:
 
 func focus_capacity() -> float:
 	return float(selected_profile().get("max_focus", MAX_FOCUS))
+
+
+func skill_cost() -> float:
+	return float(selected_profile().get("skill_cost", MAX_FOCUS))
 
 
 func selected_frames() -> Array:
@@ -314,7 +321,7 @@ func handle_select_input(event: InputEvent) -> void:
 
 
 func handle_primary_press(pos: Vector2) -> void:
-	if focus >= MAX_FOCUS and skill_panel_rect().has_point(pos):
+	if focus >= skill_cost() and skill_panel_rect().has_point(pos):
 		begin_skill_drag(pos)
 		return
 	start_charge(pos)
@@ -349,10 +356,11 @@ func activate_focus() -> void:
 
 
 func activate_skill_at(target: Vector2) -> void:
-	if focus < MAX_FOCUS:
+	var cost = skill_cost()
+	if focus < cost:
 		return
 	var profile = selected_profile()
-	focus -= MAX_FOCUS
+	focus -= cost
 	var id = str(profile.get("id", "messi"))
 	if id == "neymar":
 		use_neymar_skill(target)
@@ -538,7 +546,7 @@ func kick_active_ball(released_charge: float, quality: float) -> void:
 
 	if is_perfect:
 		perfect_streak += 1
-		var focus_gain = (14.0 + perfect_streak * 3.0) * float(profile.get("focus_gain", 1.0))
+		var focus_gain = (4.5 + perfect_streak * 0.9) * float(profile.get("focus_gain", 1.0))
 		focus = min(focus_capacity(), focus + focus_gain)
 		set_feedback("Power Curve x" + str(perfect_streak), Color(0.32, 0.95, 1.0))
 		spawn_burst(Vector2(active_ball["pos"]), Color(0.35, 0.94, 1.0), 18)
@@ -749,7 +757,7 @@ func register_enemy_kill(enemy: Dictionary, ball: Dictionary) -> void:
 	var perfect_bonus = 75 if float(ball.get("quality", 0.0)) >= 0.82 else 0
 	var gained = int(enemy.get("score", 100)) + max(combo - 1, 0) * 40 + curve_bonus + perfect_bonus
 	score += gained
-	focus = min(focus_capacity(), focus + (7.0 + combo * 0.8) * float(profile.get("focus_gain", 1.0)))
+	focus = min(focus_capacity(), focus + (2.6 + combo * 0.28) * float(profile.get("focus_gain", 1.0)))
 	float_texts.append({
 		"pos": enemy_pos + Vector2(-24.0, -28.0),
 		"text": "+" + str(gained),
@@ -777,7 +785,7 @@ func register_skill_kill(enemy: Dictionary, label: String) -> void:
 	combo_timer = 2.6
 	var gained = int(enemy.get("score", 100)) + max(combo - 1, 0) * 45 + 70
 	score += gained
-	focus = min(focus_capacity(), focus + (3.0 + combo * 0.35) * float(profile.get("focus_gain", 1.0)))
+	focus = min(focus_capacity(), focus + (0.8 + combo * 0.08) * float(profile.get("focus_gain", 1.0)))
 	float_texts.append({
 		"pos": enemy_pos + Vector2(-34.0, -32.0),
 		"text": label,
@@ -1246,9 +1254,6 @@ func draw_skill_effects() -> void:
 			draw_circle(pos, radius, Color(0.3, 0.95, 1.0, 0.08))
 			draw_arc(pos, radius, 0.0, TAU, 96, Color(0.52, 0.94, 1.0, 0.45), 5.0, true)
 			draw_tex_fit_center(tex_wowo, bun_pos, Vector2(118.0 + 46.0 * fall, 118.0 + 46.0 * fall))
-			var frames: Array = character_frames.get("messi", [])
-			if frames.size() > 0:
-				draw_tex_fit_center(frames[0], Vector2(84.0, 1010.0), Vector2(118.0, 142.0))
 
 	draw_skill_drag_preview()
 
@@ -1383,15 +1388,16 @@ func power_color(power: float) -> Color:
 
 func draw_skill_panel() -> void:
 	var capacity = focus_capacity()
-	var focus_ratio = clamp(focus / capacity, 0.0, 1.0)
-	var ready = focus >= MAX_FOCUS
+	var cost = skill_cost()
+	var ready = focus >= cost
 	var rect = skill_panel_rect()
 	draw_panel(rect, Color(0.02, 0.03, 0.05, 0.78), Color(0.3, 0.95, 1.0, 0.65) if ready else Color(1.0, 1.0, 1.0, 0.22))
 	draw_tex_center(tex_slow_icon, rect.position + Vector2(26.0, 28.0), Vector2(38.0, 38.0), Color.WHITE if ready else Color(0.55, 0.55, 0.55, 0.65))
-	var charge_count = int(round(capacity / MAX_FOCUS))
+	var charge_count = max(1, int(round(capacity / cost)))
 	for i in range(charge_count):
-		var pip_rect = Rect2(rect.position + Vector2(56.0 + float(i) * 40.0, 30.0), Vector2(32.0, 12.0))
-		var pip_value = clamp((focus - float(i) * MAX_FOCUS) / MAX_FOCUS, 0.0, 1.0)
+		var pip_w = 70.0 if charge_count == 1 else 32.0
+		var pip_rect = Rect2(rect.position + Vector2(56.0 + float(i) * 40.0, 30.0), Vector2(pip_w, 12.0))
+		var pip_value = clamp((focus - float(i) * cost) / cost, 0.0, 1.0)
 		draw_meter(pip_rect, pip_value, Color(0.2, 0.9, 1.0, 0.95))
 	draw_text_shadow(rect.position + Vector2(54.0, 24.0), "DRAG", 16, Color.WHITE if ready else Color(0.7, 0.7, 0.7))
 
