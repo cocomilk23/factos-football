@@ -3,7 +3,15 @@
 func _initialize() -> void:
 	var scene = load("res://scenes/main.tscn").instantiate()
 	root.add_child(scene)
+	scene.load_assets()
+	scene.setup_audio()
+	scene.build_character_defs()
 	scene.restart_game()
+
+	if scene.bgm_player.stream == null or scene.sfx_kick.stream == null or scene.sfx_skill_messi.stream == null or scene.sfx_skill_ronaldo.stream == null or scene.sfx_skill_neymar.stream == null:
+		printerr("ASSERT FAIL: audio streams did not load")
+		quit(1)
+		return
 
 	scene.swipe_points = [
 		scene.STRIKE_CENTER,
@@ -15,6 +23,11 @@ func _initialize() -> void:
 		printerr("ASSERT FAIL: swipe path did not build correctly")
 		quit(1)
 		return
+	for i in range(1, path.size()):
+		if path[i].y > path[i - 1].y + 0.01:
+			printerr("ASSERT FAIL: swipe path moved backward at point ", i)
+			quit(1)
+			return
 
 	scene.enemies.append({
 		"id": 1,

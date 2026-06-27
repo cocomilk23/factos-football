@@ -77,6 +77,8 @@ var skill_banner_text = ""
 var skill_banner_timer = 0.0
 var skill_banner_age = 0.0
 var skill_banner_color = Color.WHITE
+var shot_intent_side = 0.0
+var shot_intent_curve = 0.0
 
 
 func _ready() -> void:
@@ -161,18 +163,11 @@ func make_audio_player(path: String, volume: float) -> AudioStreamPlayer:
 
 
 func load_audio_stream(path: String) -> AudioStream:
-	var stream: AudioStream = null
-	var ext = path.get_extension().to_lower()
-	if ext == "wav":
-		stream = AudioStreamWAV.load_from_file(path)
-		if stream != null and path.find("bgm_loop") >= 0:
-			stream.loop_mode = 1
-	elif ext == "mp3":
-		stream = AudioStreamMP3.load_from_file(path)
-		if stream != null and path.find("bgm") >= 0:
-			stream.loop = true
-	else:
-		stream = load(path)
+	var stream: AudioStream = load(path)
+	if stream is AudioStreamWAV and path.find("bgm_loop") >= 0:
+		stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	elif stream is AudioStreamMP3 and path.find("bgm") >= 0:
+		stream.loop = true
 	return stream
 
 
@@ -186,6 +181,8 @@ func unlock_audio() -> void:
 func update_audio_state() -> void:
 	if bgm_player == null or bgm_player.stream == null or not audio_unlocked:
 		return
+	if not is_inside_tree() or not bgm_player.is_inside_tree():
+		return
 	if game_mode == "play" and not game_over:
 		if not bgm_player.playing:
 			bgm_player.play()
@@ -196,6 +193,8 @@ func update_audio_state() -> void:
 func play_sfx(player: AudioStreamPlayer) -> void:
 	if player == null or player.stream == null or not audio_unlocked:
 		return
+	if not is_inside_tree() or not player.is_inside_tree():
+		return
 	player.stop()
 	player.play()
 
@@ -205,6 +204,7 @@ func build_character_defs() -> void:
 		{
 			"id": "messi",
 			"name": "MESSI",
+			"skill_label": "WOWO DROP",
 			"role": "Left Foot",
 			"skill": "给你俩窝窝",
 			"power": 0.92,
@@ -221,6 +221,7 @@ func build_character_defs() -> void:
 		{
 			"id": "ronaldo",
 			"name": "RONALDO",
+			"skill_label": "TRIPLE KICK",
 			"role": "Power Drive",
 			"skill": "罗三脚",
 			"power": 1.22,
@@ -237,6 +238,7 @@ func build_character_defs() -> void:
 		{
 			"id": "neymar",
 			"name": "NEYMAR",
+			"skill_label": "NEYMAR ROLL",
 			"role": "Trick Spin",
 			"skill": "马尔翻滚",
 			"power": 1.0,
@@ -324,6 +326,19 @@ func selected_frames() -> Array:
 	var profile = selected_profile()
 	var id = str(profile.get("id", "messi"))
 	return character_frames.get(id, [])
+
+
+func skill_name(profile: Dictionary) -> String:
+	return str(profile.get("skill_label", profile.get("skill", "SPECIAL")))
+
+
+func _input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed:
+		unlock_audio()
+	elif event is InputEventScreenTouch and event.pressed:
+		unlock_audio()
+	elif event is InputEventKey and event.pressed:
+		unlock_audio()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -447,9 +462,9 @@ func activate_skill_at(target: Vector2) -> void:
 	else:
 		use_messi_skill(target)
 	focus = clamp(focus, 0.0, focus_capacity())
-	var skill_name = str(profile.get("skill", "SKILL"))
-	set_feedback(skill_name + "!", Color(0.35, 0.95, 1.0))
-	show_skill_banner(skill_name, Color(profile.get("color", Color.WHITE)))
+	var clean_skill_name = skill_name(profile)
+	set_feedback(clean_skill_name + "!", Color(0.35, 0.95, 1.0))
+	show_skill_banner(clean_skill_name, Color(profile.get("color", Color.WHITE)))
 	spawn_burst(STRIKE_CENTER, Color(0.2, 0.95, 1.0), 28)
 	if id == "neymar":
 		play_sfx(sfx_skill_neymar)
@@ -1051,62 +1066,77 @@ func build_swipe_path(power: float) -> PackedVector2Array:
 	points.append(STRIKE_CENTER)
 	if swipe_points.size() < 2:
 		var dir = get_aim_direction()
-		points.append(STRIKE_CENTER + dir * (760.0 + power * 420.0))
+		var end = STRIKE_CENTER + dir * (860.0 + power * 440.0)
+		for i in range(1, 49):
+			var t = float(i) / 48.0
+			points.append(STRIKE_CENTER.lerp(end, t))
 		return points
 
-	var origin = Vector2(swipe_points.front())
-	var raw_end = Vector2(swipe_points.back())
-	var end_delta = (raw_end - origin) * 1.16
-	if end_delta.length() < 48.0:
-		end_delta = Vector2(0.0, -420.0)
-	if end_delta.y > -84.0:
-		end_delta.y = -84.0
-	var end = STRIKE_CENTER + end_delta
-	end.x = clamp(end.x, -96.0, SCREEN_SIZE.x + 96.0)
-	end.y = clamp(end.y, 116.0, DANGER_Y - 18.0)
+	var intent = calculate_shot_intent()
+	shot_intent_side = float(intent["side"])
+	shot_intent_curve = float(intent["curve"])
 
-	var mid_sum = Vector2.ZERO
-	var mid_count = 0
-	for i in range(1, max(2, swipe_points.size() - 1)):
-		mid_sum += Vector2(swipe_points[i])
-		mid_count += 1
-	var raw_mid = origin.lerp(raw_end, 0.5)
-	if mid_count > 0:
-		raw_mid = mid_sum / float(mid_count)
+	var travel = 940.0 + power * 440.0
+	var end_x = clamp(STRIKE_CENTER.x + shot_intent_side * 370.0, -120.0, SCREEN_SIZE.x + 120.0)
+	var end_y = max(72.0, STRIKE_CENTER.y - travel)
+	var curve_offset = shot_intent_curve * lerp(120.0, 250.0, power)
+	var end = Vector2(end_x, end_y)
 
-	var straight_mid = STRIKE_CENTER.lerp(end, 0.48)
-	var raw_mid_delta = (raw_mid - origin) * 1.16
-	var raw_control = STRIKE_CENTER + raw_mid_delta
-	var lateral = clamp(raw_control.x - straight_mid.x, -220.0, 220.0)
-	if abs(lateral) < 18.0:
-		lateral = 0.0
-	var lift = lerp(72.0, 132.0, power)
-	var control = straight_mid + Vector2(lateral, -lift)
-	control.x = clamp(control.x, -116.0, SCREEN_SIZE.x + 116.0)
-	control.y = clamp(control.y, 160.0, STRIKE_CENTER.y - 96.0)
-
-	for i in range(1, 31):
-		var t = float(i) / 30.0
-		points.append(quadratic_bezier(STRIKE_CENTER, control, end, t))
-
-	var dir = (points[points.size() - 1] - points[points.size() - 3]).normalized()
-	if dir.length() < 0.1 or dir.y > -0.05:
-		dir = get_aim_direction()
-	var extension = 640.0 + power * 480.0
-	var tail_start = points[points.size() - 1]
-	for i in range(1, 13):
-		points.append(tail_start + dir * extension * (float(i) / 12.0))
+	for i in range(1, 57):
+		var t = float(i) / 56.0
+		var smooth_t = t * t * (3.0 - 2.0 * t)
+		var p = STRIKE_CENTER.lerp(end, smooth_t)
+		p.x += sin(t * PI) * curve_offset
+		p.y = lerp(STRIKE_CENTER.y, end_y, smooth_t)
+		points.append(p)
 	return points
 
 
+func calculate_shot_intent() -> Dictionary:
+	if swipe_points.size() < 2:
+		return {"side": 0.0, "curve": 0.0}
+
+	var origin = Vector2(swipe_points.front())
+	var last = Vector2(swipe_points.back())
+	var highest = last
+	var average = Vector2.ZERO
+	for p in swipe_points:
+		var point = Vector2(p)
+		average += point
+		if point.y < highest.y:
+			highest = point
+	average /= float(swipe_points.size())
+
+	var primary = highest - origin
+	var final = last - origin
+	if primary.y > final.y:
+		primary = final
+	if primary.length() < 36.0:
+		primary = Vector2(0.0, -240.0)
+	if primary.y > -42.0:
+		primary.y = -240.0
+
+	var side = clamp((primary.x * 0.75 + final.x * 0.25) / 300.0, -1.0, 1.0)
+	if abs(side) < 0.06:
+		side = 0.0
+
+	var expected_mid_x = origin.x + primary.x * 0.5
+	var raw_curve = clamp((average.x - expected_mid_x) / 230.0, -1.0, 1.0)
+	if abs(raw_curve) < 0.12:
+		raw_curve = side * 0.28
+	var curve = clamp(raw_curve + side * 0.22, -1.0, 1.0)
+	if abs(curve) < 0.08:
+		curve = 0.0
+
+	return {"side": side, "curve": curve}
+
+
 func estimate_swipe_curve(path: PackedVector2Array) -> float:
+	if swipe_points.size() >= 2:
+		return float(calculate_shot_intent()["curve"])
 	if path.size() < 3:
 		return clamp((path[path.size() - 1].x - STRIKE_CENTER.x) / (SCREEN_SIZE.x * 0.45), -1.0, 1.0)
-	var start = path[0]
-	var end = path[path.size() - 1]
-	var mid = path[int(path.size() / 2)]
-	var straight_mid = start.lerp(end, 0.5)
-	return clamp((mid.x - straight_mid.x) / (SCREEN_SIZE.x * 0.32), -1.0, 1.0)
+	return clamp((path[path.size() - 1].x - STRIKE_CENTER.x) / (SCREEN_SIZE.x * 0.45), -1.0, 1.0)
 
 
 func polyline_length(points: PackedVector2Array) -> float:
@@ -1162,6 +1192,11 @@ func draw_text_shadow(pos: Vector2, text: String, size: int, color: Color, shado
 	draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, size, color)
 
 
+func draw_text_center_shadow(y: float, text: String, size: int, color: Color, shadow: Color = Color(0, 0, 0, 0.82)) -> void:
+	draw_string(font, Vector2(3.0, y + 4.0), text, HORIZONTAL_ALIGNMENT_CENTER, SCREEN_SIZE.x, size, shadow)
+	draw_string(font, Vector2(0.0, y), text, HORIZONTAL_ALIGNMENT_CENTER, SCREEN_SIZE.x, size, color)
+
+
 func draw_panel(rect: Rect2, fill: Color = Color(0.0, 0.0, 0.0, 0.72), border: Color = Color(1.0, 1.0, 1.0, 0.18)) -> void:
 	draw_rect(rect, fill, true)
 	draw_rect(rect, border, false, 3.0)
@@ -1215,8 +1250,6 @@ func draw_curve_preview() -> void:
 		var path = build_swipe_path(max(0.2, charge / MAX_CHARGE))
 		draw_polyline(path, Color(0.0, 0.0, 0.0, 0.16), 4.0, true)
 		draw_polyline(path, Color(0.42, 0.95, 1.0, 0.52), 1.8, true)
-		for i in range(4, path.size(), 6):
-			draw_circle(path[i], 2.0, Color(1.0, 1.0, 1.0, 0.58))
 		return
 	var aim_x = get_aim_x()
 	var power = clamp(charge / MAX_CHARGE, 0.12, 1.0)
@@ -1230,8 +1263,6 @@ func draw_curve_preview() -> void:
 	draw_polyline(points, Color(0.0, 0.0, 0.0, 0.16), 4.0, true)
 	draw_polyline(points, arc_color, 1.8, true)
 	draw_polyline(points, Color(1.0, 1.0, 1.0, 0.62), 0.9, true)
-	for i in range(3, points.size(), 8):
-		draw_circle(points[i], 2.4, arc_color)
 
 
 func predict_curve_points(power: float, aim_x: float, quality: float) -> PackedVector2Array:
@@ -1472,8 +1503,6 @@ func draw_ui() -> void:
 	draw_text_shadow(Vector2(536.0, 1242.0), "<" if aim_x < -0.08 else ">" if aim_x > 0.08 else "-", 24, Color(0.55, 0.96, 1.0))
 	draw_skill_panel()
 
-	var aim_end = predict_curve_points(max(0.2, power), aim_x, 0.72)[14]
-	draw_circle(aim_end, 5.0, Color(0.7, 0.95, 1.0, 0.5))
 	if feedback_timer > 0.0:
 		var fb_color = Color(1.0, 0.92, 0.12, min(feedback_timer, 1.0))
 		draw_text_shadow(Vector2(380.0, 180.0), last_feedback, 24, fb_color)
@@ -1494,8 +1523,8 @@ func draw_skill_banner() -> void:
 	c.a = alpha
 	var y = 420.0 - 28.0 * alpha
 	draw_rect(Rect2(Vector2(0.0, y - 54.0), Vector2(SCREEN_SIZE.x, 104.0)), Color(0.0, 0.0, 0.0, 0.38 * alpha), true)
-	draw_text_shadow(Vector2(96.0, y + 18.0), skill_banner_text, 48, c, Color(0.0, 0.0, 0.0, 0.92 * alpha))
-	draw_text_shadow(Vector2(112.0, y + 55.0), "SPECIAL MOVE", 20, Color(1.0, 0.92, 0.25, 0.9 * alpha))
+	draw_text_center_shadow(y + 18.0, skill_banner_text, 48, c, Color(0.0, 0.0, 0.0, 0.92 * alpha))
+	draw_text_center_shadow(y + 55.0, "SPECIAL MOVE", 20, Color(1.0, 0.92, 0.25, 0.9 * alpha))
 
 
 func draw_meter(rect: Rect2, value: float, color: Color) -> void:
@@ -1534,12 +1563,12 @@ func select_card_rect(index: int) -> Rect2:
 
 func draw_character_select() -> void:
 	draw_rect(Rect2(Vector2.ZERO, SCREEN_SIZE), Color(0, 0, 0, 0.42), true)
-	draw_text_shadow(Vector2(108.0, 96.0), "CHOOSE STRIKER", 42, Color.WHITE)
-	draw_text_shadow(Vector2(142.0, 146.0), "Mobile portrait squad", 22, Color(0.84, 0.95, 1.0))
+	draw_text_center_shadow(96.0, "SELECT STRIKER", 42, Color.WHITE)
+	draw_text_center_shadow(146.0, "FACTOS FOOTBALL", 20, Color(0.84, 0.95, 1.0))
 	for i in range(character_defs.size()):
 		draw_character_card(i)
 	draw_panel(Rect2(Vector2(92.0, 1164.0), Vector2(536.0, 72.0)), Color(0.02, 0.08, 0.12, 0.88), Color(0.4, 0.95, 1.0, 0.75))
-	draw_text_shadow(Vector2(272.0, 1214.0), "START", 32, Color(1.0, 0.92, 0.22))
+	draw_text_center_shadow(1214.0, "START", 32, Color(1.0, 0.92, 0.22))
 
 
 func draw_character_card(index: int) -> void:
@@ -1551,12 +1580,12 @@ func draw_character_card(index: int) -> void:
 	var id = str(profile.get("id", "messi"))
 	var frames: Array = character_frames.get(id, [])
 	if not frames.is_empty():
-		draw_tex_fit_center(frames[2], rect.position + Vector2(118.0, 130.0), Vector2(190.0, 210.0))
-	draw_text_shadow(rect.position + Vector2(230.0, 56.0), str(profile.get("name", "")), 32, Color.WHITE)
-	draw_text_shadow(rect.position + Vector2(230.0, 92.0), str(profile.get("role", "")), 22, Color(profile.get("color", Color.WHITE)))
-	draw_text_shadow(rect.position + Vector2(230.0, 132.0), "Power " + stat_bars(float(profile.get("power", 1.0)), 0.8, 1.3), 18, Color.WHITE)
-	draw_text_shadow(rect.position + Vector2(230.0, 166.0), "Curve " + stat_bars(float(profile.get("curve", 1.0)), 0.8, 1.45), 18, Color.WHITE)
-	draw_text_shadow(rect.position + Vector2(230.0, 200.0), "Skill " + str(profile.get("skill", "")), 18, Color(1.0, 0.92, 0.22))
+		draw_tex_fit_center(frames[2], rect.position + Vector2(128.0, 132.0), Vector2(200.0, 214.0))
+	draw_text_shadow(rect.position + Vector2(250.0, 54.0), str(profile.get("name", "")), 32, Color.WHITE)
+	draw_text_shadow(rect.position + Vector2(250.0, 91.0), str(profile.get("role", "")), 21, Color(profile.get("color", Color.WHITE)))
+	draw_text_shadow(rect.position + Vector2(250.0, 130.0), "POWER  " + stat_bars(float(profile.get("power", 1.0)), 0.8, 1.3), 18, Color.WHITE)
+	draw_text_shadow(rect.position + Vector2(250.0, 164.0), "CURVE  " + stat_bars(float(profile.get("curve", 1.0)), 0.8, 1.45), 18, Color.WHITE)
+	draw_text_shadow(rect.position + Vector2(250.0, 204.0), skill_name(profile), 22, Color(1.0, 0.92, 0.22))
 
 
 func stat_bars(value: float, low: float, high: float) -> String:
