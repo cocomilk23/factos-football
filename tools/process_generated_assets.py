@@ -100,7 +100,7 @@ def save_asset(img: Image.Image, name: str, max_w: int, max_h: int) -> None:
     resize_fit(trim_alpha(img, 10), max_w, max_h).save(OUT / name)
 
 
-def process_player_sheet(path: Path, prefix: str, write_legacy: bool = False) -> None:
+def process_player_sheet(path: Path, prefix: str, write_legacy: bool = False, flip_x: bool = False) -> None:
     img = Image.open(path).convert("RGBA")
     cell_w = img.width // 4
     h = img.height
@@ -114,6 +114,8 @@ def process_player_sheet(path: Path, prefix: str, write_legacy: bool = False) ->
         cell = img.crop((idx * cell_w, 0, (idx + 1) * cell_w, h))
         cropped = cell.crop(box)
         frame = trim_alpha(alpha_from_key(cropped, (0, 255, 0), 130), 12)
+        if flip_x:
+            frame = frame.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
         result = resize_fit(frame, 290, 360)
         result.save(OUT / f"player_{prefix}_frame_{idx}.png")
         if write_legacy:
@@ -157,7 +159,7 @@ def process_props(path: Path) -> None:
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     save_background(source("v7_open_arcade_grass_background.png"))
-    process_player_sheet(source("v4_messi_sheet.png"), "messi", True)
+    process_player_sheet(source("v4_messi_sheet.png"), "messi", True, True)
     process_player_sheet(source("v4_ronaldo_sheet.png"), "ronaldo")
     process_player_sheet(source("v4_neymar_sheet.png"), "neymar")
     process_enemies(source("v5_grounded_enemy_sheet.png"))

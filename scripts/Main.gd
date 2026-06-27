@@ -1023,6 +1023,7 @@ func draw_launcher() -> void:
 
 func draw_player() -> void:
 	var frames = selected_frames()
+	var profile_id = str(selected_profile().get("id", "messi"))
 	var frame = 0
 	if player_anim > 0.0:
 		var progress = 1.0 - player_anim / PLAYER_KICK_TIME
@@ -1039,7 +1040,17 @@ func draw_player() -> void:
 	var max_size = Vector2(188.0, 238.0)
 	if frame == 2:
 		max_size = Vector2(236.0, 246.0)
-	draw_ellipse_shadow(PLAYER_DRAW_CENTER + Vector2(12.0, 104.0), Vector2(102.0, 22.0), Color(0, 0, 0, 0.35))
+	if profile_id == "messi":
+		if frame == 1:
+			center += Vector2(82.0, 0.0)
+		elif frame == 2:
+			center += Vector2(194.0, 0.0)
+		elif frame == 3:
+			center += Vector2(150.0, 0.0)
+	var shadow_center = PLAYER_DRAW_CENTER + Vector2(12.0, 104.0)
+	if profile_id == "messi" and frame > 0:
+		shadow_center = center + Vector2(0.0, 104.0)
+	draw_ellipse_shadow(shadow_center, Vector2(102.0, 22.0), Color(0, 0, 0, 0.35))
 	if kick_flash_timer > 0.0:
 		draw_circle(STRIKE_CENTER + Vector2(4.0, 12.0), 40.0 * kick_flash_timer / 0.18, Color(1.0, 0.92, 0.25, kick_flash_timer * 2.5))
 	if frame < frames.size():
