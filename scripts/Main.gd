@@ -13,6 +13,8 @@ const MAX_LIVES = 3
 const WAVE_COUNT = 15
 const PLAYER_KICK_TIME = 0.52
 const MAX_FOCUS = 100.0
+const MAX_SHOT_STOCK = 3
+const SHOT_RECHARGE_TIME = 2.15
 
 var rng = RandomNumberGenerator.new()
 var font: Font
@@ -51,6 +53,8 @@ var game_over = false
 
 var feed_timer = 0.0
 var active_ball = {}
+var shot_stock = MAX_SHOT_STOCK
+var shot_recharge_timer = 0.0
 var shot_balls: Array = []
 var enemies: Array = []
 var particles: Array = []
@@ -67,6 +71,8 @@ var is_charging = false
 var charge = 0.0
 var gesture_time = 0.0
 var swipe_points: Array = []
+var aim_direction = Vector2(0.0, -1.0)
+var aim_target_direction = Vector2(0.0, -1.0)
 var skill_dragging = false
 var skill_drag_pos = Vector2.ZERO
 var player_anim = 0.0
@@ -274,6 +280,8 @@ func show_character_select() -> void:
 	charge = 0.0
 	gesture_time = 0.0
 	swipe_points.clear()
+	aim_direction = Vector2(0.0, -1.0)
+	aim_target_direction = Vector2(0.0, -1.0)
 	skill_dragging = false
 	queue_redraw()
 
@@ -289,10 +297,12 @@ func restart_game() -> void:
 	perfect_streak = 0
 	focus = 0.0
 	game_over = false
-	feed_timer = 0.18
+	feed_timer = 0.0
 	spawn_timer = 1.2
 	next_enemy_id = 1
 	active_ball.clear()
+	shot_stock = MAX_SHOT_STOCK
+	shot_recharge_timer = 0.0
 	shot_balls.clear()
 	enemies.clear()
 	particles.clear()
@@ -303,12 +313,15 @@ func restart_game() -> void:
 	is_charging = false
 	gesture_time = 0.0
 	swipe_points.clear()
+	aim_direction = Vector2(0.0, -1.0)
+	aim_target_direction = Vector2(0.0, -1.0)
 	skill_dragging = false
 	player_anim = 0.0
 	kick_flash_timer = 0.0
 	skill_banner_timer = 0.0
 	skill_banner_age = 0.0
-	last_feedback = "Time the feed ball"
+	spawn_feed_ball()
+	last_feedback = "Drag to aim"
 	feedback_timer = 2.6
 	shake_time = 0.0
 	shake_amount = 0.0
@@ -432,10 +445,7 @@ func handle_primary_drag(pos: Vector2) -> void:
 	if skill_dragging:
 		skill_drag_pos = clamp_skill_target(pos)
 	elif is_charging:
-		var added = add_swipe_point(pos)
-		if added and is_invalid_gesture(swipe_points):
-			trim_invalid_gesture_tail()
-			release_shot(Vector2(swipe_points.back()) if not swipe_points.is_empty() else pos)
+		add_swipe_point(pos)
 
 
 func handle_primary_release(pos: Vector2) -> void:
@@ -533,31 +543,46 @@ func use_messi_skill(target: Vector2) -> void:
 func start_charge(pos: Vector2) -> void:
 	if is_charging:
 		return
+	if shot_stock <= 0:
+		set_feedback("Waiting for ball", Color(0.8, 0.92, 1.0))
+		shake(0.05, 2.0)
+		return
+	if active_ball.is_empty():
+		spawn_feed_ball()
 	is_charging = true
 	charge = 0.0
 	gesture_time = 0.0
 	swipe_points.clear()
+	update_aim_target(pos, true)
 	add_swipe_point(pos)
 
 
 func release_shot(pos: Vector2) -> void:
 	if not is_charging:
 		return
+	update_aim_target(pos, false)
+	smooth_aim(0.08)
 	add_swipe_point(pos)
 	trim_invalid_gesture_tail()
+	var shot_direction = get_aim_direction()
 	is_charging = false
 	var released_charge = charge
 	charge = 0.0
 	gesture_time = 0.0
 
+	if shot_stock <= 0:
+		active_ball.clear()
+		set_feedback("No balls", Color(0.8, 0.92, 1.0))
+		return
 	if active_ball.is_empty():
 		spawn_feed_ball()
 
-	kick_active_ball(released_charge, 0.86)
+	kick_active_ball(released_charge, 0.86, shot_direction)
 
 
 func add_swipe_point(pos: Vector2) -> bool:
 	var added = false
+	update_aim_target(pos, false)
 	if swipe_points.is_empty() or Vector2(swipe_points.back()).distance_to(pos) >= 4.0:
 		swipe_points.append(pos)
 		added = true
@@ -648,6 +673,7 @@ func _process(delta: float) -> void:
 	if is_charging:
 		gesture_time += delta
 		charge = min(charge + delta, MAX_CHARGE)
+		smooth_aim(delta)
 		if gesture_time >= MAX_GESTURE_TIME:
 			var auto_pos = Vector2(swipe_points.back()) if not swipe_points.is_empty() else get_global_mouse_position()
 			release_shot(auto_pos)
@@ -671,9 +697,13 @@ func _process(delta: float) -> void:
 
 
 func update_feed(delta: float) -> void:
+	update_shot_stock(delta)
+	if shot_stock <= 0:
+		active_ball.clear()
+		return
 	if active_ball.is_empty():
 		feed_timer -= delta
-		if feed_timer <= 0.0:
+		if feed_timer <= 0.0 and player_anim <= 0.0:
 			spawn_feed_ball()
 		return
 
@@ -682,6 +712,9 @@ func update_feed(delta: float) -> void:
 
 
 func spawn_feed_ball() -> void:
+	if shot_stock <= 0:
+		active_ball.clear()
+		return
 	active_ball = {
 		"t": 1.0,
 		"side": 0.0,
@@ -690,12 +723,41 @@ func spawn_feed_ball() -> void:
 	}
 
 
-func kick_active_ball(released_charge: float, quality: float) -> void:
+func update_shot_stock(delta: float) -> void:
+	if shot_stock >= MAX_SHOT_STOCK:
+		shot_recharge_timer = 0.0
+		return
+	shot_recharge_timer -= delta
+	var before_stock = shot_stock
+	while shot_stock < MAX_SHOT_STOCK and shot_recharge_timer <= 0.0:
+		shot_stock += 1
+		if shot_stock < MAX_SHOT_STOCK:
+			shot_recharge_timer += SHOT_RECHARGE_TIME
+		else:
+			shot_recharge_timer = 0.0
+	if active_ball.is_empty() and shot_stock > 0:
+		if shot_stock > before_stock:
+			feed_timer = 0.0
+		elif feed_timer > 0.0:
+			feed_timer = min(feed_timer, 0.12)
+		else:
+			feed_timer = 0.0
+
+
+func consume_shot_stock() -> void:
+	shot_stock = max(shot_stock - 1, 0)
+	if shot_stock < MAX_SHOT_STOCK and shot_recharge_timer <= 0.0:
+		shot_recharge_timer = SHOT_RECHARGE_TIME
+
+
+func kick_active_ball(released_charge: float, quality: float, direction: Vector2 = Vector2.ZERO) -> void:
 	var profile = selected_profile()
 	var power = clamp(released_charge / MAX_CHARGE, 0.18, 1.0)
-	var path = build_swipe_path(power)
+	if direction.length() < 0.1:
+		direction = get_aim_direction()
+	direction = clamp_forward_direction(direction)
+	var path = build_swipe_path(power, direction)
 	var path_len = max(1.0, polyline_length(path))
-	var direction = get_aim_direction()
 	var speed = lerp(620.0, 1120.0, power) * float(profile.get("power", 1.0))
 
 	var is_perfect = power >= 0.82 and swipe_points.size() >= 5
@@ -742,8 +804,9 @@ func kick_active_ball(released_charge: float, quality: float) -> void:
 	else:
 		set_feedback("Straight Shot", Color(0.78, 1.0, 0.45))
 
+	consume_shot_stock()
 	active_ball.clear()
-	feed_timer = 0.12
+	feed_timer = 0.18 if shot_stock > 0 else 0.0
 	player_anim = PLAYER_KICK_TIME
 	kick_flash_timer = 0.18
 	play_sfx(sfx_kick)
@@ -1133,33 +1196,53 @@ func get_aim_x() -> float:
 	return clamp(get_aim_direction().x, -1.0, 1.0)
 
 
+func update_aim_target(pos: Vector2, immediate: bool = false) -> void:
+	aim_target_direction = direction_from_pointer(pos)
+	if immediate or aim_direction.length() < 0.1:
+		aim_direction = aim_target_direction
+
+
+func smooth_aim(delta: float) -> void:
+	var alpha = clamp(1.0 - exp(-delta * 24.0), 0.0, 1.0)
+	aim_direction = aim_direction.lerp(aim_target_direction, alpha)
+	if aim_direction.length() < 0.1:
+		aim_direction = aim_target_direction
+	else:
+		aim_direction = aim_direction.normalized()
+
+
 func get_aim_direction() -> Vector2:
+	if is_charging:
+		return clamp_forward_direction(aim_direction)
 	if swipe_points.size() >= 2:
-		var end = Vector2(swipe_points.back())
-		var delta = end - Vector2(swipe_points.front())
-		for i in range(swipe_points.size() - 2, -1, -1):
-			var candidate = end - Vector2(swipe_points[i])
-			if candidate.length() >= 24.0:
-				delta = candidate
-				break
-		if delta.length() >= 1.0:
-			return clamp_forward_direction(delta)
-	var delta = get_global_mouse_position() - STRIKE_CENTER
+		return direction_from_pointer(Vector2(swipe_points.back()))
+	return direction_from_pointer(get_global_mouse_position())
+
+
+func direction_from_pointer(pos: Vector2) -> Vector2:
+	var delta = pos - STRIKE_CENTER
+	if delta.length() < 24.0:
+		delta = Vector2(0.0, -1.0)
 	return clamp_forward_direction(delta)
 
 
 func clamp_forward_direction(delta: Vector2) -> Vector2:
-	if delta.length() < 24.0:
+	if delta.length() < 0.001:
 		delta = Vector2(0.0, -1.0)
-	if delta.y > -18.0:
-		delta.y = -18.0
-	return delta.normalized()
+	var dir = delta.normalized()
+	if dir.y > -0.052:
+		dir.y = -0.052
+		dir = dir.normalized()
+	return dir
 
 
-func build_swipe_path(power: float) -> PackedVector2Array:
+func build_swipe_path(power: float, direction: Vector2 = Vector2.ZERO) -> PackedVector2Array:
 	var points = PackedVector2Array()
 	points.append(STRIKE_CENTER)
-	var dir = get_aim_direction()
+	var dir = direction
+	if dir.length() < 0.1:
+		dir = get_aim_direction()
+	dir = clamp_forward_direction(dir)
 	var end = STRIKE_CENTER + dir * (1180.0 + power * 620.0)
 	for i in range(1, 57):
 		var t = float(i) / 56.0
@@ -1494,6 +1577,7 @@ func draw_ui() -> void:
 	draw_rect(wave_bar, Color(1, 1, 1, 0.35), false, 2.0)
 	draw_text_shadow(Vector2(302.0, 112.0), "WAVE " + str(wave) + "/" + str(WAVE_COUNT), 16, Color.WHITE)
 
+	draw_shot_stock_ui()
 	var power = clamp(charge / MAX_CHARGE, 0.0, 1.0)
 	draw_text_shadow(Vector2(22.0, 1207.0), "POWER", 20, Color.WHITE)
 	draw_meter(Rect2(Vector2(22.0, 1220.0), Vector2(276.0, 22.0)), power, power_color(power))
@@ -1512,6 +1596,23 @@ func draw_ui() -> void:
 		draw_text_shadow(Vector2(212.0, 590.0), "Final Score: " + str(score), 26, Color.WHITE)
 		draw_text_shadow(Vector2(150.0, 650.0), "Tap to choose again", 26, Color(0.8, 0.94, 1.0))
 	draw_skill_banner()
+
+
+func draw_shot_stock_ui() -> void:
+	draw_text_shadow(Vector2(22.0, 1159.0), "BALLS", 16, Color.WHITE)
+	for i in range(MAX_SHOT_STOCK):
+		var pos = Vector2(42.0 + i * 42.0, 1186.0)
+		draw_circle(pos, 15.5, Color(0.0, 0.0, 0.0, 0.38))
+		if i < shot_stock:
+			draw_football_variant(pos, 8.5, elapsed * 6.0 + float(i), "normal", Color.WHITE)
+		else:
+			draw_football_variant(pos, 8.5, 0.0, "normal", Color(0.28, 0.32, 0.34, 0.55))
+	if shot_stock < MAX_SHOT_STOCK:
+		var progress = 1.0 - clamp(shot_recharge_timer / SHOT_RECHARGE_TIME, 0.0, 1.0)
+		var rect = Rect2(Vector2(24.0, 1199.0), Vector2(116.0, 6.0))
+		draw_rect(rect, Color(0.02, 0.03, 0.04, 0.82), true)
+		draw_rect(Rect2(rect.position, Vector2(rect.size.x * progress, rect.size.y)), Color(0.35, 0.95, 1.0, 0.88), true)
+		draw_rect(rect, Color(1.0, 1.0, 1.0, 0.28), false, 1.0)
 
 
 func draw_skill_banner() -> void:

@@ -12,6 +12,10 @@ func _initialize() -> void:
 		printerr("ASSERT FAIL: audio streams did not load")
 		quit(1)
 		return
+	if scene.shot_stock != scene.MAX_SHOT_STOCK or scene.active_ball.is_empty():
+		printerr("ASSERT FAIL: shot stock did not initialize")
+		quit(1)
+		return
 
 	scene.swipe_points = [
 		scene.STRIKE_CENTER,
@@ -82,7 +86,37 @@ func _initialize() -> void:
 		printerr("ASSERT FAIL: gesture timeout did not auto shoot")
 		quit(1)
 		return
+	if scene.shot_stock != scene.MAX_SHOT_STOCK - 1:
+		printerr("ASSERT FAIL: shot did not consume a stocked ball")
+		quit(1)
+		return
 	scene.shot_balls.clear()
+
+	scene.shot_stock = 0
+	scene.active_ball.clear()
+	scene.start_charge(scene.STRIKE_CENTER + Vector2(0.0, -180.0))
+	if scene.is_charging:
+		printerr("ASSERT FAIL: charging started with no stocked balls")
+		quit(1)
+		return
+	scene.player_anim = 0.0
+	scene.shot_recharge_timer = 0.01
+	scene._process(0.02)
+	if scene.shot_stock != 1 or scene.active_ball.is_empty():
+		printerr("ASSERT FAIL: shot stock did not recharge")
+		quit(1)
+		return
+
+	scene.start_charge(scene.STRIKE_CENTER + Vector2(0.0, -180.0))
+	var old_target = scene.aim_target_direction
+	scene.add_swipe_point(scene.STRIKE_CENTER + Vector2(64.0, -180.0))
+	if old_target.distance_to(scene.aim_target_direction) < 0.02:
+		printerr("ASSERT FAIL: small aim adjustment did not update target direction")
+		quit(1)
+		return
+	scene.is_charging = false
+	scene.charge = 0.0
+	scene.swipe_points.clear()
 
 	scene.enemies.append({
 		"id": 1,
@@ -113,6 +147,6 @@ func _initialize() -> void:
 		quit(1)
 		return
 
-	print("ASSERT PASS: audio, straight shot, gesture guard, timeout, and hit scoring")
+	print("ASSERT PASS: audio, straight shot, aim smoothing, shot stock, timeout, and hit scoring")
 	quit(0)
 
