@@ -46,6 +46,14 @@ func _initialize() -> void:
 		printerr("ASSERT FAIL: settings menu did not close")
 		quit(1)
 		return
+	var settings_touch = InputEventScreenTouch.new()
+	settings_touch.pressed = true
+	settings_touch.position = scene.settings_button_touch_rect().get_center()
+	if not scene.handle_settings_shortcut(settings_touch) or not scene.settings_open:
+		printerr("ASSERT FAIL: settings button touch did not open menu")
+		quit(1)
+		return
+	scene.handle_settings_press(scene.settings_continue_rect().get_center())
 	if scene.shot_stock != scene.MAX_SHOT_STOCK or scene.active_ball.is_empty():
 		printerr("ASSERT FAIL: shot stock did not initialize")
 		quit(1)

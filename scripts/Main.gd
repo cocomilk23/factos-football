@@ -466,6 +466,8 @@ func _input(event: InputEvent) -> void:
 		unlock_audio()
 	elif event is InputEventKey and event.pressed:
 		unlock_audio()
+	if handle_settings_shortcut(event):
+		get_viewport().set_input_as_handled()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -476,16 +478,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventKey and event.pressed:
 		unlock_audio()
 
+	if handle_settings_shortcut(event):
+		return
+
 	if game_mode == "select":
 		handle_select_input(event)
-		return
-
-	if settings_open:
-		handle_settings_input(event)
-		return
-
-	if is_settings_button_press(event):
-		open_settings_menu()
 		return
 
 	if input_lock_timer > 0.0 and (event is InputEventMouseButton or event is InputEventMouseMotion or event is InputEventScreenTouch or event is InputEventScreenDrag):
@@ -566,11 +563,23 @@ func handle_select_input(event: InputEvent) -> void:
 			restart_game()
 
 
+func handle_settings_shortcut(event: InputEvent) -> bool:
+	if game_mode == "select":
+		return false
+	if settings_open:
+		handle_settings_input(event)
+		return true
+	if is_settings_button_press(event):
+		open_settings_menu()
+		return true
+	return false
+
+
 func is_settings_button_press(event: InputEvent) -> bool:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-		return settings_button_rect().has_point(event.position)
+		return settings_button_touch_rect().has_point(event.position)
 	if event is InputEventScreenTouch and event.pressed:
-		return settings_button_rect().has_point(event.position)
+		return settings_button_touch_rect().has_point(event.position)
 	return false
 
 
@@ -2057,8 +2066,9 @@ func draw_settings_button() -> void:
 	var rect = settings_button_rect()
 	draw_panel(rect, Color(0.02, 0.04, 0.06, 0.78), Color(0.45, 0.96, 1.0, 0.5))
 	var center = rect.get_center()
-	draw_rect(Rect2(center + Vector2(-8.0, -12.0), Vector2(5.0, 24.0)), Color(0.85, 1.0, 1.0), true)
-	draw_rect(Rect2(center + Vector2(4.0, -12.0), Vector2(5.0, 24.0)), Color(0.85, 1.0, 1.0), true)
+	draw_rect(Rect2(center + Vector2(-16.0, -16.0), Vector2(6.0, 24.0)), Color(0.85, 1.0, 1.0), true)
+	draw_rect(Rect2(center + Vector2(-4.0, -16.0), Vector2(6.0, 24.0)), Color(0.85, 1.0, 1.0), true)
+	draw_string(font, rect.position + Vector2(0.0, 50.0), "MENU", HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 13, Color(0.78, 1.0, 1.0))
 
 
 func draw_settings_overlay() -> void:
@@ -2093,7 +2103,11 @@ func skill_panel_rect() -> Rect2:
 
 
 func settings_button_rect() -> Rect2:
-	return Rect2(Vector2(650.0, 108.0), Vector2(52.0, 48.0))
+	return Rect2(Vector2(616.0, 102.0), Vector2(90.0, 62.0))
+
+
+func settings_button_touch_rect() -> Rect2:
+	return Rect2(Vector2(578.0, 76.0), Vector2(142.0, 116.0))
 
 
 func settings_panel_rect() -> Rect2:
