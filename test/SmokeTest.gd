@@ -20,6 +20,32 @@ func _initialize() -> void:
 		printerr("ASSERT FAIL: gameplay music did not enable looping")
 		quit(1)
 		return
+	if scene.sfx_kick.volume_db < 1.5:
+		printerr("ASSERT FAIL: kick sound was not boosted enough")
+		quit(1)
+		return
+	scene.set_bgm_volume(0.35)
+	if abs(scene.bgm_volume - 0.35) > 0.001 or scene.bgm_player.volume_db >= scene.GAME_BGM_BASE_DB:
+		printerr("ASSERT FAIL: BGM volume did not apply")
+		quit(1)
+		return
+	scene.set_bgm_volume(0.72)
+	scene.open_settings_menu()
+	if not scene.settings_open:
+		printerr("ASSERT FAIL: settings menu did not open")
+		quit(1)
+		return
+	var paused_elapsed = scene.elapsed
+	scene._process(1.0)
+	if abs(scene.elapsed - paused_elapsed) > 0.001:
+		printerr("ASSERT FAIL: settings menu did not pause gameplay")
+		quit(1)
+		return
+	scene.handle_settings_press(scene.settings_continue_rect().get_center())
+	if scene.settings_open:
+		printerr("ASSERT FAIL: settings menu did not close")
+		quit(1)
+		return
 	if scene.shot_stock != scene.MAX_SHOT_STOCK or scene.active_ball.is_empty():
 		printerr("ASSERT FAIL: shot stock did not initialize")
 		quit(1)

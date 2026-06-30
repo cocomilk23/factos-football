@@ -17,6 +17,8 @@ const MAX_SHOT_STOCK = 3
 const SHOT_RECHARGE_TIME = 2.15
 const POWERUP_DURATION = 9.0
 const POWERUP_RADIUS = 23.0
+const MENU_BGM_BASE_DB = -15.0
+const GAME_BGM_BASE_DB = -15.0
 
 var rng = RandomNumberGenerator.new()
 var font: Font
@@ -48,6 +50,9 @@ var sfx_skill_ronaldo: AudioStreamPlayer
 var sfx_skill_neymar: AudioStreamPlayer
 var sfx_game_over: AudioStreamPlayer
 var audio_unlocked = false
+var bgm_volume = 0.72
+var settings_open = false
+var volume_dragging = false
 
 var game_mode = "select"
 var selected_character = 0
@@ -164,15 +169,16 @@ func load_assets() -> void:
 
 
 func setup_audio() -> void:
-	menu_bgm_player = make_audio_player("res://music/background.mp3", -15.0)
-	bgm_player = make_audio_player("res://music/game-background.mp3", -15.0)
+	menu_bgm_player = make_audio_player("res://music/background.mp3", MENU_BGM_BASE_DB)
+	bgm_player = make_audio_player("res://music/game-background.mp3", GAME_BGM_BASE_DB)
 	sfx_button = make_audio_player("res://music/button.mp3", -4.0)
-	sfx_kick = make_audio_player("res://music/kick.wav", -4.0)
+	sfx_kick = make_audio_player("res://music/kick.wav", 2.0)
 	sfx_hit = make_audio_player("res://assets/audio/hit.wav", -5.5)
 	sfx_skill_messi = make_audio_player("res://music/messi_wowo.mp3", -2.5)
 	sfx_skill_ronaldo = make_audio_player("res://music/ronaldo_siu.mp3", -2.5)
 	sfx_skill_neymar = make_audio_player("res://music/neymar.mp3", -3.0)
 	sfx_game_over = make_audio_player("res://assets/audio/game_over.wav", -5.0)
+	apply_bgm_volume()
 
 
 func make_audio_player(path: String, volume: float) -> AudioStreamPlayer:
@@ -186,11 +192,13 @@ func make_audio_player(path: String, volume: float) -> AudioStreamPlayer:
 func load_audio_stream(path: String) -> AudioStream:
 	var stream: AudioStream = null
 	if path.get_extension().to_lower() == "wav":
-		stream = AudioStreamWAV.load_from_file(path)
-	elif path.get_extension().to_lower() == "mp3":
-		stream = AudioStreamMP3.load_from_file(path)
+		stream = load_imported_audio(path)
 		if stream == null:
-			stream = load(path)
+			stream = AudioStreamWAV.load_from_file(path)
+	elif path.get_extension().to_lower() == "mp3":
+		stream = load_imported_audio(path)
+		if stream == null:
+			stream = AudioStreamMP3.load_from_file(path)
 	else:
 		stream = load(path)
 	var lower_path = path.to_lower()
@@ -200,6 +208,15 @@ func load_audio_stream(path: String) -> AudioStream:
 	elif stream is AudioStreamMP3 and is_music_loop:
 		stream.loop = true
 	return stream
+
+
+func load_imported_audio(path: String) -> AudioStream:
+	if not ResourceLoader.exists(path):
+		return null
+	var stream = load(path)
+	if stream is AudioStream:
+		return stream
+	return null
 
 
 func unlock_audio() -> void:
@@ -228,6 +245,25 @@ func set_music_active(player: AudioStreamPlayer, active: bool) -> void:
 			player.play()
 	elif player.playing:
 		player.stop()
+
+
+func set_bgm_volume(value: float) -> void:
+	bgm_volume = clamp(value, 0.0, 1.0)
+	apply_bgm_volume()
+
+
+func apply_bgm_volume() -> void:
+	apply_player_music_volume(menu_bgm_player, MENU_BGM_BASE_DB)
+	apply_player_music_volume(bgm_player, GAME_BGM_BASE_DB)
+
+
+func apply_player_music_volume(player: AudioStreamPlayer, base_db: float) -> void:
+	if player == null:
+		return
+	if bgm_volume <= 0.001:
+		player.volume_db = -80.0
+	else:
+		player.volume_db = base_db + linear_to_db(bgm_volume)
 
 
 func play_sfx(player: AudioStreamPlayer) -> void:
@@ -314,6 +350,8 @@ func show_character_select() -> void:
 	aim_target_direction = Vector2(0.0, -1.0)
 	input_lock_timer = 0.0
 	skill_dragging = false
+	settings_open = false
+	volume_dragging = false
 	update_audio_state()
 	queue_redraw()
 
@@ -359,6 +397,8 @@ func restart_game() -> void:
 	kick_flash_timer = 0.0
 	skill_banner_timer = 0.0
 	skill_banner_age = 0.0
+	settings_open = false
+	volume_dragging = false
 	spawn_feed_ball()
 	last_feedback = "Drag to aim"
 	feedback_timer = 2.6
@@ -440,6 +480,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		handle_select_input(event)
 		return
 
+	if settings_open:
+		handle_settings_input(event)
+		return
+
+	if is_settings_button_press(event):
+		open_settings_menu()
+		return
+
 	if input_lock_timer > 0.0 and (event is InputEventMouseButton or event is InputEventMouseMotion or event is InputEventScreenTouch or event is InputEventScreenDrag):
 		return
 
@@ -516,6 +564,81 @@ func handle_select_input(event: InputEvent) -> void:
 		if Rect2(Vector2(92.0, 1164.0), Vector2(536.0, 72.0)).has_point(pos):
 			play_sfx(sfx_button)
 			restart_game()
+
+
+func is_settings_button_press(event: InputEvent) -> bool:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		return settings_button_rect().has_point(event.position)
+	if event is InputEventScreenTouch and event.pressed:
+		return settings_button_rect().has_point(event.position)
+	return false
+
+
+func open_settings_menu() -> void:
+	play_sfx(sfx_button)
+	settings_open = true
+	volume_dragging = false
+	is_charging = false
+	skill_dragging = false
+	charge = 0.0
+	gesture_time = 0.0
+	swipe_points.clear()
+	queue_redraw()
+
+
+func close_settings_menu() -> void:
+	play_sfx(sfx_button)
+	settings_open = false
+	volume_dragging = false
+	queue_redraw()
+
+
+func handle_settings_input(event: InputEvent) -> void:
+	if event is InputEventMouseMotion and volume_dragging:
+		update_bgm_volume_from_pos(event.position)
+		return
+	if event is InputEventScreenDrag and volume_dragging:
+		update_bgm_volume_from_pos(event.position)
+		return
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if event.pressed:
+			handle_settings_press(event.position)
+		else:
+			volume_dragging = false
+		return
+	if event is InputEventScreenTouch:
+		if event.pressed:
+			handle_settings_press(event.position)
+		else:
+			volume_dragging = false
+		return
+
+
+func handle_settings_press(pos: Vector2) -> void:
+	if settings_continue_rect().has_point(pos):
+		close_settings_menu()
+		return
+	if settings_restart_rect().has_point(pos):
+		play_sfx(sfx_button)
+		restart_game()
+		return
+	if settings_select_rect().has_point(pos):
+		play_sfx(sfx_button)
+		show_character_select()
+		return
+	if settings_volume_touch_rect().has_point(pos):
+		volume_dragging = true
+		play_sfx(sfx_button)
+		update_bgm_volume_from_pos(pos)
+		return
+	if not settings_panel_rect().has_point(pos):
+		close_settings_menu()
+
+
+func update_bgm_volume_from_pos(pos: Vector2) -> void:
+	var rect = settings_volume_track_rect()
+	set_bgm_volume((pos.x - rect.position.x) / rect.size.x)
+	queue_redraw()
 
 
 func handle_primary_press(pos: Vector2) -> void:
@@ -750,6 +873,9 @@ func _process(delta: float) -> void:
 		return
 	if game_over:
 		update_effects(delta)
+		queue_redraw()
+		return
+	if settings_open:
 		queue_redraw()
 		return
 
@@ -1828,6 +1954,7 @@ func draw_ui() -> void:
 	draw_meter(Rect2(Vector2(326.0, 1220.0), Vector2(200.0, 22.0)), abs(aim_x), Color(0.22, 0.9, 1.0, 0.95))
 	draw_text_shadow(Vector2(536.0, 1242.0), "<" if aim_x < -0.08 else ">" if aim_x > 0.08 else "-", 24, Color(0.55, 0.96, 1.0))
 	draw_skill_panel()
+	draw_settings_button()
 
 	if feedback_timer > 0.0:
 		var fb_color = Color(1.0, 0.92, 0.12, min(feedback_timer, 1.0))
@@ -1840,6 +1967,8 @@ func draw_ui() -> void:
 		draw_text_shadow(Vector2(212.0, 590.0), "Final Score: " + str(score), 26, Color.WHITE)
 		draw_text_shadow(Vector2(150.0, 650.0), "Tap to choose again", 26, Color(0.8, 0.94, 1.0))
 	draw_skill_banner()
+	if settings_open:
+		draw_settings_overlay()
 
 
 func draw_shot_stock_ui() -> void:
@@ -1924,8 +2053,71 @@ func draw_skill_panel() -> void:
 	draw_text_shadow(rect.position + Vector2(54.0, 24.0), "DRAG", 16, Color.WHITE if ready else Color(0.7, 0.7, 0.7))
 
 
+func draw_settings_button() -> void:
+	var rect = settings_button_rect()
+	draw_panel(rect, Color(0.02, 0.04, 0.06, 0.78), Color(0.45, 0.96, 1.0, 0.5))
+	var center = rect.get_center()
+	draw_rect(Rect2(center + Vector2(-8.0, -12.0), Vector2(5.0, 24.0)), Color(0.85, 1.0, 1.0), true)
+	draw_rect(Rect2(center + Vector2(4.0, -12.0), Vector2(5.0, 24.0)), Color(0.85, 1.0, 1.0), true)
+
+
+func draw_settings_overlay() -> void:
+	draw_rect(Rect2(Vector2.ZERO, SCREEN_SIZE), Color(0.0, 0.0, 0.0, 0.58), true)
+	var panel = settings_panel_rect()
+	draw_panel(panel, Color(0.015, 0.035, 0.05, 0.94), Color(0.45, 0.96, 1.0, 0.78))
+	draw_string(font, panel.position + Vector2(0.0, 84.0), "PAUSED", HORIZONTAL_ALIGNMENT_CENTER, panel.size.x, 42, Color.WHITE)
+	draw_string(font, panel.position + Vector2(0.0, 126.0), "SETTINGS", HORIZONTAL_ALIGNMENT_CENTER, panel.size.x, 18, Color(0.7, 0.96, 1.0))
+
+	var track = settings_volume_track_rect()
+	draw_text_shadow(track.position + Vector2(0.0, -30.0), "BGM VOLUME", 20, Color.WHITE)
+	draw_text_shadow(track.position + Vector2(track.size.x - 56.0, -30.0), str(int(round(bgm_volume * 100.0))) + "%", 20, Color(1.0, 0.92, 0.24))
+	draw_rect(track, Color(0.01, 0.015, 0.02, 0.9), true)
+	draw_rect(Rect2(track.position, Vector2(track.size.x * bgm_volume, track.size.y)), Color(0.25, 0.92, 1.0, 0.94), true)
+	draw_rect(track, Color(1.0, 1.0, 1.0, 0.35), false, 2.0)
+	var knob_x = track.position.x + track.size.x * bgm_volume
+	draw_circle(Vector2(knob_x, track.position.y + track.size.y * 0.5), 17.0, Color(0.95, 1.0, 1.0))
+	draw_circle(Vector2(knob_x, track.position.y + track.size.y * 0.5), 20.0, Color(0.3, 0.95, 1.0, 0.22))
+
+	draw_settings_action_button(settings_continue_rect(), "CONTINUE", Color(0.35, 1.0, 0.62))
+	draw_settings_action_button(settings_restart_rect(), "RESTART", Color(1.0, 0.86, 0.28))
+	draw_settings_action_button(settings_select_rect(), "SELECT PLAYER", Color(0.5, 0.9, 1.0))
+
+
+func draw_settings_action_button(rect: Rect2, label: String, color: Color) -> void:
+	draw_panel(rect, Color(0.02, 0.06, 0.08, 0.88), Color(color, 0.74))
+	draw_string(font, rect.position + Vector2(0.0, rect.size.y * 0.5 + 12.0), label, HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 24, color)
+
+
 func skill_panel_rect() -> Rect2:
 	return Rect2(Vector2(552.0, 1192.0), Vector2(146.0, 56.0))
+
+
+func settings_button_rect() -> Rect2:
+	return Rect2(Vector2(650.0, 108.0), Vector2(52.0, 48.0))
+
+
+func settings_panel_rect() -> Rect2:
+	return Rect2(Vector2(72.0, 344.0), Vector2(576.0, 560.0))
+
+
+func settings_volume_track_rect() -> Rect2:
+	return Rect2(Vector2(150.0, 526.0), Vector2(420.0, 18.0))
+
+
+func settings_volume_touch_rect() -> Rect2:
+	return Rect2(settings_volume_track_rect().position - Vector2(18.0, 34.0), settings_volume_track_rect().size + Vector2(36.0, 68.0))
+
+
+func settings_continue_rect() -> Rect2:
+	return Rect2(Vector2(130.0, 640.0), Vector2(460.0, 68.0))
+
+
+func settings_restart_rect() -> Rect2:
+	return Rect2(Vector2(130.0, 730.0), Vector2(460.0, 68.0))
+
+
+func settings_select_rect() -> Rect2:
+	return Rect2(Vector2(130.0, 820.0), Vector2(460.0, 68.0))
 
 
 func difficulty_button_rect(index: int) -> Rect2:
