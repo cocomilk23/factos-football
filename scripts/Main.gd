@@ -38,7 +38,9 @@ var difficulty_defs: Array = [
 var character_frames: Dictionary = {}
 var neymar_roll_frames: Array = []
 var ronaldo_sweep_frames: Array = []
+var menu_bgm_player: AudioStreamPlayer
 var bgm_player: AudioStreamPlayer
+var sfx_button: AudioStreamPlayer
 var sfx_kick: AudioStreamPlayer
 var sfx_hit: AudioStreamPlayer
 var sfx_skill_messi: AudioStreamPlayer
@@ -162,7 +164,9 @@ func load_assets() -> void:
 
 
 func setup_audio() -> void:
-	bgm_player = make_audio_player("res://assets/audio/bgm_loop.wav", -14.0)
+	menu_bgm_player = make_audio_player("res://music/background.mp3", -15.0)
+	bgm_player = make_audio_player("res://music/game-background.mp3", -15.0)
+	sfx_button = make_audio_player("res://music/button.mp3", -4.0)
 	sfx_kick = make_audio_player("res://music/kick.wav", -4.0)
 	sfx_hit = make_audio_player("res://assets/audio/hit.wav", -5.5)
 	sfx_skill_messi = make_audio_player("res://music/messi_wowo.mp3", -2.5)
@@ -184,16 +188,16 @@ func load_audio_stream(path: String) -> AudioStream:
 	if path.get_extension().to_lower() == "wav":
 		stream = AudioStreamWAV.load_from_file(path)
 	elif path.get_extension().to_lower() == "mp3":
-		stream = load(path)
+		stream = AudioStreamMP3.load_from_file(path)
 		if stream == null:
-			stream = AudioStreamMP3.load_from_file(path)
+			stream = load(path)
 	else:
 		stream = load(path)
-	if stream == null and path.get_extension().to_lower() == "mp3":
-		stream = AudioStreamMP3.load_from_file(path)
-	if stream is AudioStreamWAV and path.find("bgm_loop") >= 0:
+	var lower_path = path.to_lower()
+	var is_music_loop = lower_path.find("bgm") >= 0 or lower_path.find("background") >= 0
+	if stream is AudioStreamWAV and is_music_loop:
 		stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
-	elif stream is AudioStreamMP3 and path.find("bgm") >= 0:
+	elif stream is AudioStreamMP3 and is_music_loop:
 		stream.loop = true
 	return stream
 
@@ -206,15 +210,24 @@ func unlock_audio() -> void:
 
 
 func update_audio_state() -> void:
-	if bgm_player == null or bgm_player.stream == null or not audio_unlocked:
+	if not audio_unlocked:
 		return
-	if not is_inside_tree() or not bgm_player.is_inside_tree():
+	if not is_inside_tree():
 		return
-	if game_mode == "play" and not game_over:
-		if not bgm_player.playing:
-			bgm_player.play()
-	elif bgm_player.playing:
-		bgm_player.stop()
+	var should_play_menu = game_mode == "select"
+	var should_play_game = game_mode == "play" and not game_over
+	set_music_active(menu_bgm_player, should_play_menu)
+	set_music_active(bgm_player, should_play_game)
+
+
+func set_music_active(player: AudioStreamPlayer, active: bool) -> void:
+	if player == null or player.stream == null or not player.is_inside_tree():
+		return
+	if active:
+		if not player.playing:
+			player.play()
+	elif player.playing:
+		player.stop()
 
 
 func play_sfx(player: AudioStreamPlayer) -> void:
@@ -301,6 +314,7 @@ func show_character_select() -> void:
 	aim_target_direction = Vector2(0.0, -1.0)
 	input_lock_timer = 0.0
 	skill_dragging = false
+	update_audio_state()
 	queue_redraw()
 
 
@@ -431,6 +445,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	if event.is_action_pressed("restart"):
 		if game_over:
+			play_sfx(sfx_button)
 			show_character_select()
 		else:
 			restart_game()
@@ -438,8 +453,10 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	if game_over:
 		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+			play_sfx(sfx_button)
 			show_character_select()
 		elif event is InputEventScreenTouch and event.pressed:
+			play_sfx(sfx_button)
 			show_character_select()
 		return
 
@@ -474,25 +491,30 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func handle_select_input(event: InputEvent) -> void:
 	if event.is_action_pressed("restart"):
+		play_sfx(sfx_button)
 		selected_character = (selected_character + 1) % character_defs.size()
 		queue_redraw()
 		return
 	if event.is_action_pressed("shoot") or event.is_action_pressed("skill"):
+		play_sfx(sfx_button)
 		restart_game()
 		return
 	if (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed) or (event is InputEventScreenTouch and event.pressed):
 		var pos = event.position
 		for i in range(character_defs.size()):
 			if select_card_rect(i).has_point(pos):
+				play_sfx(sfx_button)
 				selected_character = i
 				queue_redraw()
 				return
 		for i in range(difficulty_defs.size()):
 			if difficulty_button_rect(i).has_point(pos):
+				play_sfx(sfx_button)
 				selected_difficulty = i
 				queue_redraw()
 				return
 		if Rect2(Vector2(92.0, 1164.0), Vector2(536.0, 72.0)).has_point(pos):
+			play_sfx(sfx_button)
 			restart_game()
 
 

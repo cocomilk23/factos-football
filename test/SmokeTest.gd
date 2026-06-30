@@ -8,8 +8,16 @@ func _initialize() -> void:
 	scene.build_character_defs()
 	scene.restart_game()
 
-	if scene.bgm_player.stream == null or scene.sfx_kick.stream == null or scene.sfx_skill_messi.stream == null or scene.sfx_skill_ronaldo.stream == null or scene.sfx_skill_neymar.stream == null:
+	if scene.menu_bgm_player.stream == null or scene.bgm_player.stream == null or scene.sfx_button.stream == null or scene.sfx_kick.stream == null or scene.sfx_skill_messi.stream == null or scene.sfx_skill_ronaldo.stream == null or scene.sfx_skill_neymar.stream == null:
 		printerr("ASSERT FAIL: audio streams did not load")
+		quit(1)
+		return
+	if scene.menu_bgm_player.stream is AudioStreamMP3 and not scene.menu_bgm_player.stream.loop:
+		printerr("ASSERT FAIL: menu music did not enable looping")
+		quit(1)
+		return
+	if scene.bgm_player.stream is AudioStreamMP3 and not scene.bgm_player.stream.loop:
+		printerr("ASSERT FAIL: gameplay music did not enable looping")
 		quit(1)
 		return
 	if scene.shot_stock != scene.MAX_SHOT_STOCK or scene.active_ball.is_empty():
