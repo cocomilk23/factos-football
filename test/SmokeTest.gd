@@ -54,6 +54,13 @@ func _initialize() -> void:
 		quit(1)
 		return
 	scene.handle_settings_press(scene.settings_continue_rect().get_center())
+	var viewport_corner_touch = InputEventScreenTouch.new()
+	viewport_corner_touch.pressed = true
+	viewport_corner_touch.position = Vector2(920.0, 420.0)
+	if not scene.is_settings_button_press(viewport_corner_touch):
+		printerr("ASSERT FAIL: viewport-scaled corner touch did not hit settings")
+		quit(1)
+		return
 	if scene.shot_stock != scene.MAX_SHOT_STOCK or scene.active_ball.is_empty():
 		printerr("ASSERT FAIL: shot stock did not initialize")
 		quit(1)

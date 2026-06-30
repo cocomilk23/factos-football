@@ -576,11 +576,46 @@ func handle_settings_shortcut(event: InputEvent) -> bool:
 
 
 func is_settings_button_press(event: InputEvent) -> bool:
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-		return settings_button_touch_rect().has_point(event.position)
+	var pos = settings_press_position(event)
+	if pos.x < 0.0:
+		return false
+	var game_pos = viewport_to_game_pos(pos)
+	return settings_button_touch_rect().has_point(game_pos) or settings_hud_touch_rect().has_point(game_pos) or settings_viewport_corner_hit(pos)
+
+
+func settings_press_position(event: InputEvent) -> Vector2:
+	if event is InputEventMouseButton and event.pressed:
+		return event.position
 	if event is InputEventScreenTouch and event.pressed:
-		return settings_button_touch_rect().has_point(event.position)
-	return false
+		return event.position
+	return Vector2(-1.0, -1.0)
+
+
+func viewport_to_game_pos(pos: Vector2) -> Vector2:
+	var viewport_size = safe_viewport_size()
+	if viewport_size.x <= 1.0 or viewport_size.y <= 1.0:
+		return pos
+	return Vector2(pos.x * SCREEN_SIZE.x / viewport_size.x, pos.y * SCREEN_SIZE.y / viewport_size.y)
+
+
+func settings_viewport_corner_hit(pos: Vector2) -> bool:
+	var viewport_size = safe_viewport_size()
+	if viewport_size.x <= 1.0 or viewport_size.y <= 1.0:
+		return false
+	return pos.x >= viewport_size.x * 0.55 and pos.y <= viewport_size.y * 0.35
+
+
+func safe_viewport_size() -> Vector2:
+	if not is_inside_tree():
+		return SCREEN_SIZE
+	var viewport_size = get_viewport_rect().size
+	if viewport_size.x <= 1.0 or viewport_size.y <= 1.0:
+		return SCREEN_SIZE
+	return viewport_size
+
+
+func settings_hud_touch_rect() -> Rect2:
+	return Rect2(Vector2(428.0, 0.0), Vector2(292.0, 230.0))
 
 
 func open_settings_menu() -> void:
