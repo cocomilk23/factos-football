@@ -50,6 +50,7 @@ jobs:
           set -eux
           mkdir -p build
           /tmp/godot/Godot_v4.7-stable_linux.x86_64 --headless --path . --export-release Web build/index.html
+          cp web/static/loading-bg.jpg build/loading-bg.jpg
           echo "factos.stylerewrite.xyz" > build/CNAME
           touch build/.nojekyll
 
