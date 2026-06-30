@@ -15,6 +15,8 @@ const PLAYER_KICK_TIME = 0.52
 const MAX_FOCUS = 100.0
 const MAX_SHOT_STOCK = 3
 const SHOT_RECHARGE_TIME = 2.15
+const POWERUP_DURATION = 9.0
+const POWERUP_RADIUS = 23.0
 
 var rng = RandomNumberGenerator.new()
 var font: Font
@@ -28,6 +30,11 @@ var tex_slow_icon: Texture2D
 var tex_wowo: Texture2D
 var enemy_textures: Array = []
 var character_defs: Array = []
+var difficulty_defs: Array = [
+	{"id": "rookie", "name": "ROOKIE", "duration": 95.0, "spawn_start": 2.55, "spawn_end": 1.08, "speed": 0.78, "hp": 0.82, "burst": 0.55, "score": 0.9, "powerup_interval": 6.4},
+	{"id": "pro", "name": "PRO", "duration": 110.0, "spawn_start": 2.25, "spawn_end": 0.82, "speed": 0.96, "hp": 1.0, "burst": 0.85, "score": 1.0, "powerup_interval": 7.2},
+	{"id": "legend", "name": "LEGEND", "duration": 125.0, "spawn_start": 1.95, "spawn_end": 0.62, "speed": 1.12, "hp": 1.12, "burst": 1.12, "score": 1.18, "powerup_interval": 8.2}
+]
 var character_frames: Dictionary = {}
 var neymar_roll_frames: Array = []
 var ronaldo_sweep_frames: Array = []
@@ -42,6 +49,7 @@ var audio_unlocked = false
 
 var game_mode = "select"
 var selected_character = 0
+var selected_difficulty = 0
 var elapsed = 0.0
 var score = 0
 var lives = MAX_LIVES
@@ -50,6 +58,7 @@ var combo_timer = 0.0
 var perfect_streak = 0
 var focus = 0.0
 var game_over = false
+var game_cleared = false
 
 var feed_timer = 0.0
 var active_ball = {}
@@ -61,6 +70,11 @@ var particles: Array = []
 var impact_fx: Array = []
 var float_texts: Array = []
 var skill_fx: Array = []
+var powerups: Array = []
+var powerup_spawn_timer = 0.0
+var scatter_timer = 0.0
+var big_ball_timer = 0.0
+var no_cd_timer = 0.0
 
 var spawn_timer = 0.0
 var next_enemy_id = 1
@@ -73,6 +87,7 @@ var gesture_time = 0.0
 var swipe_points: Array = []
 var aim_direction = Vector2(0.0, -1.0)
 var aim_target_direction = Vector2(0.0, -1.0)
+var input_lock_timer = 0.0
 var skill_dragging = false
 var skill_drag_pos = Vector2.ZERO
 var player_anim = 0.0
@@ -269,6 +284,7 @@ func build_character_defs() -> void:
 func show_character_select() -> void:
 	game_mode = "select"
 	game_over = false
+	game_cleared = false
 	active_ball.clear()
 	shot_balls.clear()
 	enemies.clear()
@@ -276,12 +292,14 @@ func show_character_select() -> void:
 	impact_fx.clear()
 	float_texts.clear()
 	skill_fx.clear()
+	powerups.clear()
 	is_charging = false
 	charge = 0.0
 	gesture_time = 0.0
 	swipe_points.clear()
 	aim_direction = Vector2(0.0, -1.0)
 	aim_target_direction = Vector2(0.0, -1.0)
+	input_lock_timer = 0.0
 	skill_dragging = false
 	queue_redraw()
 
@@ -297,6 +315,7 @@ func restart_game() -> void:
 	perfect_streak = 0
 	focus = 0.0
 	game_over = false
+	game_cleared = false
 	feed_timer = 0.0
 	spawn_timer = 1.2
 	next_enemy_id = 1
@@ -309,12 +328,18 @@ func restart_game() -> void:
 	impact_fx.clear()
 	float_texts.clear()
 	skill_fx.clear()
+	powerups.clear()
+	powerup_spawn_timer = 2.2
+	scatter_timer = 0.0
+	big_ball_timer = 0.0
+	no_cd_timer = 0.0
 	charge = 0.0
 	is_charging = false
 	gesture_time = 0.0
 	swipe_points.clear()
 	aim_direction = Vector2(0.0, -1.0)
 	aim_target_direction = Vector2(0.0, -1.0)
+	input_lock_timer = 0.28
 	skill_dragging = false
 	player_anim = 0.0
 	kick_flash_timer = 0.0
@@ -353,6 +378,33 @@ func skill_name(profile: Dictionary) -> String:
 	return str(profile.get("skill_label", profile.get("skill", "SPECIAL")))
 
 
+func selected_difficulty_profile() -> Dictionary:
+	if difficulty_defs.is_empty():
+		return {}
+	return difficulty_defs[clamp(selected_difficulty, 0, difficulty_defs.size() - 1)]
+
+
+func level_duration() -> float:
+	return float(selected_difficulty_profile().get("duration", 105.0))
+
+
+func level_progress() -> float:
+	return clamp(elapsed / max(level_duration(), 1.0), 0.0, 1.0)
+
+
+func complete_level() -> void:
+	if game_over:
+		return
+	game_over = true
+	game_cleared = true
+	is_charging = false
+	active_ball.clear()
+	set_feedback("Stage Clear", Color(0.35, 1.0, 0.54))
+	for i in range(34):
+		spawn_burst(Vector2(rng.randf_range(80.0, SCREEN_SIZE.x - 80.0), rng.randf_range(180.0, 760.0)), Color(0.35, 1.0, 0.54), 2)
+	shake(0.18, 6.0)
+
+
 func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed:
 		unlock_audio()
@@ -374,6 +426,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		handle_select_input(event)
 		return
 
+	if input_lock_timer > 0.0 and (event is InputEventMouseButton or event is InputEventMouseMotion or event is InputEventScreenTouch or event is InputEventScreenDrag):
+		return
+
 	if event.is_action_pressed("restart"):
 		if game_over:
 			show_character_select()
@@ -383,6 +438,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	if game_over:
 		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+			show_character_select()
+		elif event is InputEventScreenTouch and event.pressed:
 			show_character_select()
 		return
 
@@ -423,11 +480,16 @@ func handle_select_input(event: InputEvent) -> void:
 	if event.is_action_pressed("shoot") or event.is_action_pressed("skill"):
 		restart_game()
 		return
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+	if (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed) or (event is InputEventScreenTouch and event.pressed):
 		var pos = event.position
 		for i in range(character_defs.size()):
 			if select_card_rect(i).has_point(pos):
 				selected_character = i
+				queue_redraw()
+				return
+		for i in range(difficulty_defs.size()):
+			if difficulty_button_rect(i).has_point(pos):
+				selected_difficulty = i
 				queue_redraw()
 				return
 		if Rect2(Vector2(92.0, 1164.0), Vector2(536.0, 72.0)).has_point(pos):
@@ -543,7 +605,7 @@ func use_messi_skill(target: Vector2) -> void:
 func start_charge(pos: Vector2) -> void:
 	if is_charging:
 		return
-	if shot_stock <= 0:
+	if not can_shoot():
 		set_feedback("Waiting for ball", Color(0.8, 0.92, 1.0))
 		shake(0.05, 2.0)
 		return
@@ -570,7 +632,7 @@ func release_shot(pos: Vector2) -> void:
 	charge = 0.0
 	gesture_time = 0.0
 
-	if shot_stock <= 0:
+	if not can_shoot():
 		active_ball.clear()
 		set_feedback("No balls", Color(0.8, 0.92, 1.0))
 		return
@@ -670,6 +732,15 @@ func _process(delta: float) -> void:
 		return
 
 	elapsed += delta
+	input_lock_timer = max(input_lock_timer - delta, 0.0)
+	scatter_timer = max(scatter_timer - delta, 0.0)
+	big_ball_timer = max(big_ball_timer - delta, 0.0)
+	no_cd_timer = max(no_cd_timer - delta, 0.0)
+	if elapsed >= level_duration():
+		complete_level()
+		update_effects(delta)
+		queue_redraw()
+		return
 	if is_charging:
 		gesture_time += delta
 		charge = min(charge + delta, MAX_CHARGE)
@@ -690,6 +761,7 @@ func _process(delta: float) -> void:
 
 	update_feed(delta)
 	update_enemies(delta)
+	update_powerups(delta)
 	update_skill_fx(delta)
 	update_shot_balls(delta)
 	update_effects(delta)
@@ -698,7 +770,7 @@ func _process(delta: float) -> void:
 
 func update_feed(delta: float) -> void:
 	update_shot_stock(delta)
-	if shot_stock <= 0:
+	if not can_shoot():
 		active_ball.clear()
 		return
 	if active_ball.is_empty():
@@ -712,7 +784,7 @@ func update_feed(delta: float) -> void:
 
 
 func spawn_feed_ball() -> void:
-	if shot_stock <= 0:
+	if not can_shoot():
 		active_ball.clear()
 		return
 	active_ball = {
@@ -745,9 +817,15 @@ func update_shot_stock(delta: float) -> void:
 
 
 func consume_shot_stock() -> void:
+	if no_cd_timer > 0.0:
+		return
 	shot_stock = max(shot_stock - 1, 0)
 	if shot_stock < MAX_SHOT_STOCK and shot_recharge_timer <= 0.0:
 		shot_recharge_timer = SHOT_RECHARGE_TIME
+
+
+func can_shoot() -> bool:
+	return shot_stock > 0 or no_cd_timer > 0.0
 
 
 func kick_active_ball(released_charge: float, quality: float, direction: Vector2 = Vector2.ZERO) -> void:
@@ -756,8 +834,6 @@ func kick_active_ball(released_charge: float, quality: float, direction: Vector2
 	if direction.length() < 0.1:
 		direction = get_aim_direction()
 	direction = clamp_forward_direction(direction)
-	var path = build_swipe_path(power, direction)
-	var path_len = max(1.0, polyline_length(path))
 	var speed = lerp(620.0, 1120.0, power) * float(profile.get("power", 1.0))
 
 	var is_perfect = power >= 0.82 and swipe_points.size() >= 5
@@ -768,31 +844,46 @@ func kick_active_ball(released_charge: float, quality: float, direction: Vector2
 	var damage = float(profile.get("damage", 1.0))
 	if is_perfect:
 		damage += 1.0
+	if big_ball_timer > 0.0:
+		damage += 0.65
 
-	var ball = {
-		"pos": active_ball["pos"],
-		"vel": direction * speed,
-		"accel": Vector2.ZERO,
-		"life": 4.8,
-		"age": 0.0,
-		"visible": false,
-		"reveal_distance": SHOT_REVEAL_DISTANCE,
-		"radius": 14.0 if is_perfect else 13.0,
-		"trail": [],
-		"spin": float(active_ball.get("spin", 0.0)),
-		"path": path,
-		"path_dist": 0.0,
-		"path_len": path_len,
-		"path_speed": speed,
-		"hits": 0,
-		"hit_ids": [],
-		"power": power,
-		"quality": quality,
-		"damage": damage,
-		"pierce_limit": 4 + int(profile.get("pierce_bonus", 0)) if is_perfect else 2 + int(profile.get("pierce_bonus", 0)),
-		"kind": kind
-	}
-	shot_balls.append(ball)
+	var directions = [direction]
+	if scatter_timer > 0.0:
+		directions = [direction.rotated(-0.16), direction, direction.rotated(0.16)]
+	for i in range(directions.size()):
+		var d = clamp_forward_direction(Vector2(directions[i]))
+		var path = build_swipe_path(power, d)
+		var path_len = max(1.0, polyline_length(path))
+		var radius = 14.0 if is_perfect else 13.0
+		var pierce = 4 + int(profile.get("pierce_bonus", 0)) if is_perfect else 2 + int(profile.get("pierce_bonus", 0))
+		if big_ball_timer > 0.0:
+			radius *= 1.72
+			pierce += 1
+		var ball = {
+			"pos": active_ball["pos"],
+			"vel": d * speed,
+			"accel": Vector2.ZERO,
+			"life": 4.8,
+			"age": 0.0,
+			"visible": false,
+			"reveal_distance": SHOT_REVEAL_DISTANCE,
+			"radius": radius,
+			"trail": [],
+			"spin": float(active_ball.get("spin", 0.0)) + float(i) * 0.8,
+			"path": path,
+			"path_dist": 0.0,
+			"path_len": path_len,
+			"path_speed": speed,
+			"hits": 0,
+			"hit_ids": [],
+			"power": power,
+			"quality": quality,
+			"damage": damage,
+			"pierce_limit": pierce,
+			"kind": kind,
+			"boosted": big_ball_timer > 0.0
+		}
+		shot_balls.append(ball)
 
 	if is_perfect:
 		perfect_streak += 1
@@ -822,22 +913,26 @@ func register_miss(text: String) -> void:
 
 
 func update_enemies(delta: float) -> void:
+	var difficulty = selected_difficulty_profile()
+	var progress = level_progress()
 	spawn_timer -= delta
 	if spawn_timer <= 0.0:
 		var burst_count = 1
-		if elapsed > 42.0 and rng.randf() < 0.22:
+		var burst_scale = float(difficulty.get("burst", 0.85))
+		if progress > 0.45 and rng.randf() < 0.16 * burst_scale:
 			burst_count = 2
-		if elapsed > 92.0 and rng.randf() < 0.15:
+		if progress > 0.78 and rng.randf() < 0.08 * burst_scale:
 			burst_count = 3
 		for i in range(burst_count):
 			spawn_enemy(i, burst_count)
-		var interval = max(0.58, 2.1 - elapsed * 0.01)
+		var interval = lerp(float(difficulty.get("spawn_start", 2.2)), float(difficulty.get("spawn_end", 0.82)), progress)
 		spawn_timer = interval + rng.randf_range(-0.18, 0.16)
 
 	for i in range(enemies.size() - 1, -1, -1):
 		var enemy = enemies[i]
 		var pos = Vector2(enemy["pos"])
-		var speed = float(enemy["speed"]) + elapsed * 0.22
+		var speed_scale = float(difficulty.get("speed", 1.0))
+		var speed = float(enemy["speed"]) + elapsed * 0.08 * speed_scale
 		pos.y += speed * delta
 		var type = int(enemy.get("type", 0))
 		var drift_scale = 12.0 + float(enemy.get("lane_drift", 0.0))
@@ -866,6 +961,10 @@ func update_enemies(delta: float) -> void:
 func spawn_enemy(offset_index: int, burst_count: int) -> void:
 	var type = choose_enemy_type()
 	var profile = enemy_profile(type)
+	var difficulty = selected_difficulty_profile()
+	var speed_scale = float(difficulty.get("speed", 1.0))
+	var hp_scale = float(difficulty.get("hp", 1.0))
+	var score_scale = float(difficulty.get("score", 1.0))
 	var lane_count = 5
 	var lane = rng.randi_range(0, lane_count - 1)
 	var base_x = 88.0 + float(lane) * ((SCREEN_SIZE.x - 176.0) / float(lane_count - 1))
@@ -875,11 +974,11 @@ func spawn_enemy(offset_index: int, burst_count: int) -> void:
 		"id": next_enemy_id,
 		"type": type,
 		"pos": Vector2(clamp(base_x, 58.0, SCREEN_SIZE.x - 58.0), ENEMY_SPAWN_Y + offset_index * 30.0),
-		"speed": float(profile["speed"]) + min(elapsed * 0.22, 26.0),
+		"speed": (float(profile["speed"]) + min(elapsed * 0.12, 16.0)) * speed_scale,
 		"radius": float(profile["radius"]),
-		"hp": float(profile["hp"]),
-		"max_hp": float(profile["hp"]),
-		"score": int(profile["score"]),
+		"hp": max(1.0, round(float(profile["hp"]) * hp_scale)),
+		"max_hp": max(1.0, round(float(profile["hp"]) * hp_scale)),
+		"score": int(round(float(profile["score"]) * score_scale)),
 		"phase": rng.randf_range(0.0, TAU),
 		"wobble": 0.0,
 		"lane_drift": float(profile["lane_drift"]),
@@ -891,15 +990,16 @@ func spawn_enemy(offset_index: int, burst_count: int) -> void:
 
 func choose_enemy_type() -> int:
 	var roll = rng.randf()
-	if elapsed > 18.0 and roll < 0.13:
+	var progress = level_progress()
+	if progress > 0.18 and roll < 0.10:
 		return 1
-	if elapsed > 34.0 and roll < 0.26:
+	if progress > 0.34 and roll < 0.21:
 		return 2
-	if elapsed > 58.0 and roll < 0.34:
+	if progress > 0.62 and roll < 0.28:
 		return 3
-	if elapsed > 42.0 and roll < 0.46:
+	if progress > 0.48 and roll < 0.38:
 		return 4
-	if elapsed > 20.0 and roll > 0.94:
+	if progress > 0.28 and roll > 0.96:
 		return 5
 	return 0
 
@@ -917,6 +1017,96 @@ func enemy_profile(type: int) -> Dictionary:
 		5:
 			return {"hp": 1.0, "speed": 48.0, "radius": 23.0, "score": 330, "lane_drift": 26.0}
 	return {"hp": 1.0, "speed": 36.0, "radius": 23.0, "score": 100, "lane_drift": 6.0}
+
+
+func update_powerups(delta: float) -> void:
+	for i in range(powerups.size() - 1, -1, -1):
+		var item = powerups[i]
+		item["ttl"] = float(item.get("ttl", 10.0)) - delta
+		item["age"] = float(item.get("age", 0.0)) + delta
+		if float(item["ttl"]) <= 0.0:
+			powerups.remove_at(i)
+		else:
+			powerups[i] = item
+
+	if elapsed > level_duration() - 8.0:
+		return
+	powerup_spawn_timer -= delta
+	if powerup_spawn_timer <= 0.0:
+		spawn_powerup()
+		var difficulty = selected_difficulty_profile()
+		powerup_spawn_timer = float(difficulty.get("powerup_interval", 7.2)) + rng.randf_range(-1.0, 1.25)
+
+
+func spawn_powerup() -> void:
+	if powerups.size() >= 3:
+		return
+	var types = ["scatter", "big", "nocd"]
+	var type = str(types[rng.randi_range(0, types.size() - 1)])
+	var lane_count = 5
+	var lane = rng.randi_range(0, lane_count - 1)
+	var x = 88.0 + float(lane) * ((SCREEN_SIZE.x - 176.0) / float(lane_count - 1))
+	var y = rng.randf_range(390.0, 905.0)
+	for item in powerups:
+		if Vector2(item["pos"]).distance_to(Vector2(x, y)) < 96.0:
+			y = clamp(y + 118.0, 360.0, 930.0)
+	powerups.append({
+		"type": type,
+		"pos": Vector2(x, y),
+		"ttl": 11.0,
+		"age": 0.0
+	})
+
+
+func check_ball_powerup_hits(ball: Dictionary) -> void:
+	var pos = Vector2(ball["pos"])
+	var radius = float(ball.get("radius", 14.0))
+	for i in range(powerups.size() - 1, -1, -1):
+		var item = powerups[i]
+		var item_pos = Vector2(item["pos"])
+		if pos.distance_to(item_pos) > radius + POWERUP_RADIUS:
+			continue
+		activate_powerup(str(item.get("type", "scatter")), item_pos)
+		powerups.remove_at(i)
+		return
+
+
+func activate_powerup(type: String, pos: Vector2) -> void:
+	var color = powerup_color(type)
+	if type == "scatter":
+		scatter_timer = max(scatter_timer, POWERUP_DURATION)
+		set_feedback("Scatter Shot", color)
+	elif type == "big":
+		big_ball_timer = max(big_ball_timer, POWERUP_DURATION)
+		set_feedback("Big Ball", color)
+	else:
+		no_cd_timer = max(no_cd_timer, POWERUP_DURATION)
+		set_feedback("No CD", color)
+	spawn_burst(pos, color, 22)
+	spawn_impact(pos, 72.0, color)
+	shake(0.08, 4.5)
+
+
+func powerup_color(type: String) -> Color:
+	match type:
+		"scatter":
+			return Color(1.0, 0.82, 0.18, 0.95)
+		"big":
+			return Color(0.95, 0.32, 1.0, 0.95)
+		"nocd":
+			return Color(0.25, 0.95, 1.0, 0.95)
+	return Color(1.0, 1.0, 1.0, 0.95)
+
+
+func powerup_label(type: String) -> String:
+	match type:
+		"scatter":
+			return "3"
+		"big":
+			return "BIG"
+		"nocd":
+			return "FREE"
+	return "UP"
 
 
 func update_shot_balls(delta: float) -> void:
@@ -953,6 +1143,7 @@ func update_shot_balls(delta: float) -> void:
 			while trail.size() > 40:
 				trail.pop_front()
 			ball["trail"] = trail
+			check_ball_powerup_hits(ball)
 			check_ball_enemy_hits(ball)
 
 		var path_done = ball.has("path") and float(ball.get("path_dist", 0.0)) >= float(ball.get("path_len", 0.0))
@@ -1333,6 +1524,7 @@ func _draw() -> void:
 	draw_set_transform(offset)
 	draw_aim_preview()
 	draw_strike_zone()
+	draw_powerups()
 	draw_enemies()
 	draw_player()
 	draw_balls()
@@ -1443,6 +1635,33 @@ func enemy_bar_color(type: int) -> Color:
 		5:
 			return Color(1.0, 0.88, 0.1, 0.95)
 	return Color(1.0, 0.36, 0.22, 0.95)
+
+
+func draw_powerups() -> void:
+	for item in powerups:
+		var type = str(item.get("type", "scatter"))
+		var pos = Vector2(item["pos"])
+		var age = float(item.get("age", 0.0))
+		var ttl = float(item.get("ttl", 10.0))
+		var pulse = 1.0 + sin(elapsed * 7.0 + age) * 0.08
+		var c = powerup_color(type)
+		var alpha = clamp(ttl / 2.0, 0.0, 1.0)
+		c.a *= alpha
+		draw_ellipse_shadow(pos + Vector2(0.0, 22.0), Vector2(48.0, 12.0), Color(0, 0, 0, 0.28 * alpha))
+		draw_circle(pos, POWERUP_RADIUS * pulse, Color(c.r, c.g, c.b, 0.22 * alpha))
+		draw_circle(pos, POWERUP_RADIUS * 0.72 * pulse, Color(0.02, 0.04, 0.05, 0.82 * alpha))
+		draw_circle(pos, POWERUP_RADIUS * 0.72 * pulse, c, false, 3.0)
+		if type == "scatter":
+			draw_football_variant(pos + Vector2(-12.0, 2.0), 5.2, age * 5.0, "normal", Color.WHITE)
+			draw_football_variant(pos + Vector2(0.0, -7.0), 5.2, age * 5.0, "normal", Color.WHITE)
+			draw_football_variant(pos + Vector2(12.0, 2.0), 5.2, age * 5.0, "normal", Color.WHITE)
+		elif type == "big":
+			draw_football_variant(pos, 9.5, age * 4.0, "normal", Color.WHITE)
+			draw_arc(pos, 20.0, -0.6, 0.8, 18, c, 3.0, true)
+		else:
+			draw_line(pos + Vector2(-12.0, -7.0), pos + Vector2(12.0, 7.0), c, 4.0, true)
+			draw_line(pos + Vector2(-12.0, 7.0), pos + Vector2(12.0, -7.0), c, 4.0, true)
+		draw_text_shadow(pos + Vector2(-18.0, -29.0), powerup_label(type), 14, c)
 
 
 func draw_balls() -> void:
@@ -1569,15 +1788,16 @@ func draw_ui() -> void:
 		var c = Color.WHITE if i < lives else Color(0.18, 0.18, 0.18, 0.55)
 		draw_tex_center(tex_heart, Vector2(530.0 + i * 50.0, 65.0), Vector2(40.0, 40.0), c)
 
-	var wave = min(WAVE_COUNT, max(1, int(elapsed / 24.0) + 1))
-	var wave_progress = clamp(float(wave) / float(WAVE_COUNT), 0.0, 1.0)
+	var wave = min(WAVE_COUNT, max(1, int(level_progress() * float(WAVE_COUNT)) + 1))
+	var wave_progress = level_progress()
 	var wave_bar = Rect2(Vector2(110.0, 116.0), Vector2(500.0, 16.0))
 	draw_rect(wave_bar, Color(0.03, 0.04, 0.05, 0.92), true)
 	draw_rect(Rect2(wave_bar.position, Vector2(wave_bar.size.x * wave_progress, wave_bar.size.y)), Color(0.08, 0.88, 0.42, 0.95), true)
 	draw_rect(wave_bar, Color(1, 1, 1, 0.35), false, 2.0)
-	draw_text_shadow(Vector2(302.0, 112.0), "WAVE " + str(wave) + "/" + str(WAVE_COUNT), 16, Color.WHITE)
+	draw_text_shadow(Vector2(250.0, 112.0), "WAVE " + str(wave) + "/" + str(WAVE_COUNT) + "  " + str(selected_difficulty_profile().get("name", "PRO")), 16, Color.WHITE)
 
 	draw_shot_stock_ui()
+	draw_active_powerup_ui()
 	var power = clamp(charge / MAX_CHARGE, 0.0, 1.0)
 	draw_text_shadow(Vector2(22.0, 1207.0), "POWER", 20, Color.WHITE)
 	draw_meter(Rect2(Vector2(22.0, 1220.0), Vector2(276.0, 22.0)), power, power_color(power))
@@ -1592,7 +1812,9 @@ func draw_ui() -> void:
 		draw_text_shadow(Vector2(380.0, 180.0), last_feedback, 24, fb_color)
 	if game_over:
 		draw_rect(Rect2(Vector2.ZERO, SCREEN_SIZE), Color(0.0, 0.0, 0.0, 0.64), true)
-		draw_text_shadow(Vector2(188.0, 520.0), "GAME OVER", 48, Color(1.0, 0.28, 0.24))
+		var title = "STAGE CLEAR" if game_cleared else "GAME OVER"
+		var title_color = Color(0.35, 1.0, 0.54) if game_cleared else Color(1.0, 0.28, 0.24)
+		draw_text_shadow(Vector2(156.0, 520.0), title, 48, title_color)
 		draw_text_shadow(Vector2(212.0, 590.0), "Final Score: " + str(score), 26, Color.WHITE)
 		draw_text_shadow(Vector2(150.0, 650.0), "Tap to choose again", 26, Color(0.8, 0.94, 1.0))
 	draw_skill_banner()
@@ -1603,16 +1825,42 @@ func draw_shot_stock_ui() -> void:
 	for i in range(MAX_SHOT_STOCK):
 		var pos = Vector2(42.0 + i * 42.0, 1186.0)
 		draw_circle(pos, 15.5, Color(0.0, 0.0, 0.0, 0.38))
-		if i < shot_stock:
+		if no_cd_timer > 0.0:
+			draw_football_variant(pos, 8.5, elapsed * 9.0 + float(i), "normal", Color(0.35, 0.95, 1.0))
+		elif i < shot_stock:
 			draw_football_variant(pos, 8.5, elapsed * 6.0 + float(i), "normal", Color.WHITE)
 		else:
 			draw_football_variant(pos, 8.5, 0.0, "normal", Color(0.28, 0.32, 0.34, 0.55))
-	if shot_stock < MAX_SHOT_STOCK:
+	if no_cd_timer > 0.0:
+		draw_text_shadow(Vector2(150.0, 1193.0), "FREE", 15, Color(0.35, 0.95, 1.0))
+	elif shot_stock < MAX_SHOT_STOCK:
 		var progress = 1.0 - clamp(shot_recharge_timer / SHOT_RECHARGE_TIME, 0.0, 1.0)
 		var rect = Rect2(Vector2(24.0, 1199.0), Vector2(116.0, 6.0))
 		draw_rect(rect, Color(0.02, 0.03, 0.04, 0.82), true)
 		draw_rect(Rect2(rect.position, Vector2(rect.size.x * progress, rect.size.y)), Color(0.35, 0.95, 1.0, 0.88), true)
 		draw_rect(rect, Color(1.0, 1.0, 1.0, 0.28), false, 1.0)
+
+
+func draw_active_powerup_ui() -> void:
+	var x = 22.0
+	var y = 1128.0
+	var entries = [
+		{"type": "scatter", "time": scatter_timer},
+		{"type": "big", "time": big_ball_timer},
+		{"type": "nocd", "time": no_cd_timer}
+	]
+	for entry in entries:
+		var t = float(entry["time"])
+		if t <= 0.0:
+			continue
+		var type = str(entry["type"])
+		var c = powerup_color(type)
+		var rect = Rect2(Vector2(x, y), Vector2(94.0, 14.0))
+		draw_rect(rect, Color(0.02, 0.03, 0.04, 0.78), true)
+		draw_rect(Rect2(rect.position, Vector2(rect.size.x * clamp(t / POWERUP_DURATION, 0.0, 1.0), rect.size.y)), c, true)
+		draw_rect(rect, Color(1, 1, 1, 0.32), false, 1.0)
+		draw_text_shadow(Vector2(x + 3.0, y - 3.0), powerup_label(type), 12, Color.WHITE)
+		x += 104.0
 
 
 func draw_skill_banner() -> void:
@@ -1658,6 +1906,10 @@ func skill_panel_rect() -> Rect2:
 	return Rect2(Vector2(552.0, 1192.0), Vector2(146.0, 56.0))
 
 
+func difficulty_button_rect(index: int) -> Rect2:
+	return Rect2(Vector2(78.0 + float(index) * 192.0, 158.0), Vector2(174.0, 36.0))
+
+
 func select_card_rect(index: int) -> Rect2:
 	return Rect2(Vector2(42.0, 210.0 + float(index) * 294.0), Vector2(636.0, 250.0))
 
@@ -1666,10 +1918,20 @@ func draw_character_select() -> void:
 	draw_rect(Rect2(Vector2.ZERO, SCREEN_SIZE), Color(0, 0, 0, 0.42), true)
 	draw_text_center_shadow(96.0, "SELECT STRIKER", 42, Color.WHITE)
 	draw_text_center_shadow(146.0, "FACTOS FOOTBALL", 20, Color(0.84, 0.95, 1.0))
+	draw_difficulty_selector()
 	for i in range(character_defs.size()):
 		draw_character_card(i)
 	draw_panel(Rect2(Vector2(92.0, 1164.0), Vector2(536.0, 72.0)), Color(0.02, 0.08, 0.12, 0.88), Color(0.4, 0.95, 1.0, 0.75))
 	draw_text_center_shadow(1214.0, "START", 32, Color(1.0, 0.92, 0.22))
+
+
+func draw_difficulty_selector() -> void:
+	for i in range(difficulty_defs.size()):
+		var rect = difficulty_button_rect(i)
+		var selected = i == selected_difficulty
+		var c = Color(0.36, 0.95, 1.0, 0.86 if selected else 0.3)
+		draw_panel(rect, Color(0.02, 0.05, 0.07, 0.82 if selected else 0.56), c)
+		draw_string(font, rect.position + Vector2(0.0, 24.0), str(difficulty_defs[i].get("name", "MODE")), HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 16, Color.WHITE if selected else Color(0.7, 0.8, 0.84))
 
 
 func draw_character_card(index: int) -> void:

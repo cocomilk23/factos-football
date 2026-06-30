@@ -16,6 +16,15 @@ func _initialize() -> void:
 		printerr("ASSERT FAIL: shot stock did not initialize")
 		quit(1)
 		return
+	if scene.difficulty_defs.size() != 3 or scene.level_duration() > 100.0:
+		printerr("ASSERT FAIL: difficulty setup did not initialize to rookie pacing")
+		quit(1)
+		return
+	if scene.input_lock_timer <= 0.0:
+		printerr("ASSERT FAIL: restart did not lock starter input")
+		quit(1)
+		return
+	scene.input_lock_timer = 0.0
 
 	scene.swipe_points = [
 		scene.STRIKE_CENTER,
@@ -118,6 +127,59 @@ func _initialize() -> void:
 	scene.charge = 0.0
 	scene.swipe_points.clear()
 
+	scene.shot_balls.clear()
+	scene.active_ball = {
+		"t": 1.0,
+		"side": 0.0,
+		"pos": scene.STRIKE_CENTER,
+		"spin": 0.0
+	}
+	scene.shot_stock = scene.MAX_SHOT_STOCK
+	scene.scatter_timer = scene.POWERUP_DURATION
+	scene.kick_active_ball(scene.MAX_CHARGE, 0.86, Vector2(0.0, -1.0))
+	if scene.shot_balls.size() != 3:
+		printerr("ASSERT FAIL: scatter powerup did not fire three balls")
+		quit(1)
+		return
+	scene.shot_balls.clear()
+	scene.scatter_timer = 0.0
+
+	scene.active_ball = {
+		"t": 1.0,
+		"side": 0.0,
+		"pos": scene.STRIKE_CENTER,
+		"spin": 0.0
+	}
+	scene.shot_stock = scene.MAX_SHOT_STOCK
+	scene.big_ball_timer = scene.POWERUP_DURATION
+	scene.kick_active_ball(scene.MAX_CHARGE, 0.86, Vector2(0.0, -1.0))
+	if scene.shot_balls.is_empty() or float(scene.shot_balls[0].get("radius", 0.0)) < 20.0:
+		printerr("ASSERT FAIL: big ball powerup did not enlarge shot")
+		quit(1)
+		return
+	scene.shot_balls.clear()
+	scene.big_ball_timer = 0.0
+
+	scene.shot_stock = 0
+	scene.no_cd_timer = scene.POWERUP_DURATION
+	scene.active_ball.clear()
+	scene.start_charge(scene.STRIKE_CENTER + Vector2(0.0, -180.0))
+	scene.release_shot(scene.STRIKE_CENTER + Vector2(0.0, -260.0))
+	if scene.shot_balls.is_empty() or scene.shot_stock != 0:
+		printerr("ASSERT FAIL: no-cd powerup did not allow free shot")
+		quit(1)
+		return
+	scene.shot_balls.clear()
+	scene.no_cd_timer = 0.0
+
+	scene.powerups.clear()
+	scene.activate_powerup("scatter", scene.STRIKE_CENTER + Vector2(0.0, -260.0))
+	if scene.scatter_timer <= 0.0:
+		printerr("ASSERT FAIL: powerup activation did not start timer")
+		quit(1)
+		return
+	scene.scatter_timer = 0.0
+
 	scene.enemies.append({
 		"id": 1,
 		"pos": scene.STRIKE_CENTER + Vector2(0.0, -140.0),
@@ -147,6 +209,6 @@ func _initialize() -> void:
 		quit(1)
 		return
 
-	print("ASSERT PASS: audio, straight shot, aim smoothing, shot stock, timeout, and hit scoring")
+	print("ASSERT PASS: audio, straight shot, aim smoothing, shot stock, powerups, difficulty, timeout, and hit scoring")
 	quit(0)
 
