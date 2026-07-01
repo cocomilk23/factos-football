@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dcu44t6jd64kb"
-path="res://.godot/imported/skill_wowo.png-8b35b2061eadb2e3c854d3f8a54bc51b.ctex"
+uid="uid://clcxdtoywswbx"
+path="res://.godot/imported/trail_segment.png-9476b8285c15c3229d7b00e184310856.ctex"
 metadata={
 "vram_texture": true
 }
 
 [deps]
 
-source_file="res://assets/img/skill_wowo.png"
-dest_files=["res://.godot/imported/skill_wowo.png-8b35b2061eadb2e3c854d3f8a54bc51b.ctex"]
+source_file="res://assets/img/trail_segment.png"
+dest_files=["res://.godot/imported/trail_segment.png-9476b8285c15c3229d7b00e184310856.ctex"]
 
 [params]
 

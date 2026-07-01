@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dcu44t6jd64kb"
-path="res://.godot/imported/skill_wowo.png-8b35b2061eadb2e3c854d3f8a54bc51b.ctex"
+uid="uid://bm3leb646gxrs"
+path="res://.godot/imported/enemy_0.png-f9502f2920c8287d98f37e4b572f0e29.ctex"
 metadata={
 "vram_texture": true
 }
 
 [deps]
 
-source_file="res://assets/img/skill_wowo.png"
-dest_files=["res://.godot/imported/skill_wowo.png-8b35b2061eadb2e3c854d3f8a54bc51b.ctex"]
+source_file="res://assets/img/enemy_0.png"
+dest_files=["res://.godot/imported/enemy_0.png-f9502f2920c8287d98f37e4b572f0e29.ctex"]
 
 [params]
 

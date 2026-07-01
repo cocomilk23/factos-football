@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dcu44t6jd64kb"
-path="res://.godot/imported/skill_wowo.png-8b35b2061eadb2e3c854d3f8a54bc51b.ctex"
+uid="uid://bffgmxcgcvbfh"
+path="res://.godot/imported/ball_projectile.png-2e0d517d7cdc91b4b2e581f305d1fa42.ctex"
 metadata={
 "vram_texture": true
 }
 
 [deps]
 
-source_file="res://assets/img/skill_wowo.png"
-dest_files=["res://.godot/imported/skill_wowo.png-8b35b2061eadb2e3c854d3f8a54bc51b.ctex"]
+source_file="res://assets/img/ball_projectile.png"
+dest_files=["res://.godot/imported/ball_projectile.png-2e0d517d7cdc91b4b2e581f305d1fa42.ctex"]
 
 [params]
 

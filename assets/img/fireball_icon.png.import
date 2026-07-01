@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dcu44t6jd64kb"
-path="res://.godot/imported/skill_wowo.png-8b35b2061eadb2e3c854d3f8a54bc51b.ctex"
+uid="uid://u2x575hkxqx2"
+path="res://.godot/imported/fireball_icon.png-ad1f4c3b24167f9f8898a7d542c59fa9.ctex"
 metadata={
 "vram_texture": true
 }
 
 [deps]
 
-source_file="res://assets/img/skill_wowo.png"
-dest_files=["res://.godot/imported/skill_wowo.png-8b35b2061eadb2e3c854d3f8a54bc51b.ctex"]
+source_file="res://assets/img/fireball_icon.png"
+dest_files=["res://.godot/imported/fireball_icon.png-ad1f4c3b24167f9f8898a7d542c59fa9.ctex"]
 
 [params]
 

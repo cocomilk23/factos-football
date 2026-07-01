@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dcu44t6jd64kb"
-path="res://.godot/imported/skill_wowo.png-8b35b2061eadb2e3c854d3f8a54bc51b.ctex"
+uid="uid://brfxok28tgh2y"
+path="res://.godot/imported/player_neymar_frame_1.png-17a7a1a76abb0f149942ef3cb411da76.ctex"
 metadata={
 "vram_texture": true
 }
 
 [deps]
 
-source_file="res://assets/img/skill_wowo.png"
-dest_files=["res://.godot/imported/skill_wowo.png-8b35b2061eadb2e3c854d3f8a54bc51b.ctex"]
+source_file="res://assets/img/player_neymar_frame_1.png"
+dest_files=["res://.godot/imported/player_neymar_frame_1.png-17a7a1a76abb0f149942ef3cb411da76.ctex"]
 
 [params]
 

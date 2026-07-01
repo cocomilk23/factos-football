@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dcu44t6jd64kb"
-path="res://.godot/imported/skill_wowo.png-8b35b2061eadb2e3c854d3f8a54bc51b.ctex"
+uid="uid://dcoh3ju008c6k"
+path="res://.godot/imported/pierce_icon.png-a009608e4b13ae1b0ea5c988bb5c1ec2.ctex"
 metadata={
 "vram_texture": true
 }
 
 [deps]
 
-source_file="res://assets/img/skill_wowo.png"
-dest_files=["res://.godot/imported/skill_wowo.png-8b35b2061eadb2e3c854d3f8a54bc51b.ctex"]
+source_file="res://assets/img/pierce_icon.png"
+dest_files=["res://.godot/imported/pierce_icon.png-a009608e4b13ae1b0ea5c988bb5c1ec2.ctex"]
 
 [params]
 

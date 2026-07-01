@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dcu44t6jd64kb"
-path="res://.godot/imported/skill_wowo.png-8b35b2061eadb2e3c854d3f8a54bc51b.ctex"
+uid="uid://btdngro16j8uw"
+path="res://.godot/imported/curve_slash.png-849719868b0d8215dbf4c35c2bf92a74.ctex"
 metadata={
 "vram_texture": true
 }
 
 [deps]
 
-source_file="res://assets/img/skill_wowo.png"
-dest_files=["res://.godot/imported/skill_wowo.png-8b35b2061eadb2e3c854d3f8a54bc51b.ctex"]
+source_file="res://assets/img/curve_slash.png"
+dest_files=["res://.godot/imported/curve_slash.png-849719868b0d8215dbf4c35c2bf92a74.ctex"]
 
 [params]
 
