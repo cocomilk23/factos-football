@@ -131,13 +131,13 @@ func setup_pause_menu_button() -> void:
 	var button_rect = pause_menu_button_rect()
 	pause_menu_button = Button.new()
 	pause_menu_button.name = "PauseMenuButton"
-	pause_menu_button.text = "II\nMENU"
+	pause_menu_button.text = "II"
 	pause_menu_button.position = button_rect.position
 	pause_menu_button.size = button_rect.size
 	pause_menu_button.custom_minimum_size = button_rect.size
 	pause_menu_button.focus_mode = Control.FOCUS_NONE
 	pause_menu_button.mouse_filter = Control.MOUSE_FILTER_STOP
-	pause_menu_button.add_theme_font_size_override("font_size", 16)
+	pause_menu_button.add_theme_font_size_override("font_size", 24)
 	pause_menu_button.add_theme_color_override("font_color", Color(0.83, 1.0, 1.0))
 	pause_menu_button.add_theme_color_override("font_pressed_color", Color(1.0, 0.92, 0.3))
 	pause_menu_button.add_theme_color_override("font_hover_color", Color(0.95, 1.0, 1.0))
@@ -159,6 +159,11 @@ func pause_button_style(fill: Color, border: Color) -> StyleBoxFlat:
 	style.content_margin_right = 6.0
 	style.content_margin_top = 6.0
 	style.content_margin_bottom = 6.0
+	style.corner_radius_top_left = 38.0
+	style.corner_radius_top_right = 38.0
+	style.corner_radius_bottom_left = 38.0
+	style.corner_radius_bottom_right = 38.0
+	style.anti_aliasing = true
 	return style
 
 
@@ -2239,7 +2244,7 @@ func skill_panel_rect() -> Rect2:
 
 
 func pause_menu_button_rect() -> Rect2:
-	return Rect2(Vector2(604.0, 94.0), Vector2(114.0, 86.0))
+	return Rect2(Vector2(615.0, 96.0), Vector2(80.0, 80.0))
 
 
 func settings_button_center() -> Vector2:
