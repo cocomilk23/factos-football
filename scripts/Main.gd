@@ -615,7 +615,7 @@ func is_settings_button_press(event: InputEvent) -> bool:
 	if pos.x < 0.0:
 		return false
 	var game_pos = viewport_to_game_pos(pos)
-	return settings_button_touch_rect().has_point(game_pos) or settings_hud_touch_rect().has_point(game_pos) or settings_viewport_corner_hit(pos)
+	return settings_button_touch_rect().has_point(pos) or settings_button_touch_rect().has_point(game_pos) or settings_viewport_button_hit(pos)
 
 
 func settings_press_position(event: InputEvent) -> Vector2:
@@ -633,11 +633,15 @@ func viewport_to_game_pos(pos: Vector2) -> Vector2:
 	return Vector2(pos.x * SCREEN_SIZE.x / viewport_size.x, pos.y * SCREEN_SIZE.y / viewport_size.y)
 
 
-func settings_viewport_corner_hit(pos: Vector2) -> bool:
+func settings_viewport_button_hit(pos: Vector2) -> bool:
 	var viewport_size = safe_viewport_size()
 	if viewport_size.x <= 1.0 or viewport_size.y <= 1.0:
 		return false
-	return pos.x >= viewport_size.x * 0.55 and pos.y <= viewport_size.y * 0.35
+	var game_rect = settings_button_touch_rect()
+	var scale = Vector2(viewport_size.x / SCREEN_SIZE.x, viewport_size.y / SCREEN_SIZE.y)
+	var viewport_rect = Rect2(game_rect.position * scale, game_rect.size * scale)
+	var touch_padding = max(10.0, min(viewport_size.x, viewport_size.y) * 0.018)
+	return viewport_rect.grow(touch_padding).has_point(pos)
 
 
 func safe_viewport_size() -> Vector2:
@@ -647,10 +651,6 @@ func safe_viewport_size() -> Vector2:
 	if viewport_size.x <= 1.0 or viewport_size.y <= 1.0:
 		return SCREEN_SIZE
 	return viewport_size
-
-
-func settings_hud_touch_rect() -> Rect2:
-	return Rect2(Vector2(428.0, 0.0), Vector2(292.0, 230.0))
 
 
 func open_settings_menu() -> void:
@@ -2255,4 +2255,3 @@ func stat_bars(value: float, low: float, high: float) -> String:
 	for i in range(5):
 		s += "|" if i < count else "."
 	return s
-
