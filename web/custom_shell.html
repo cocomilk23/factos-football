@@ -305,14 +305,14 @@
 			function setProgress(current, total) {
 				if (!total || total <= 0) {
 					shell.classList.add("is-indeterminate");
-					status.textContent = "Warming up";
+					status.textContent = "Starting engine";
 					return;
 				}
 				const value = Math.max(0.04, Math.min(1, current / total));
 				shell.classList.remove("is-indeterminate");
 				fill.style.transform = `scaleX(${value})`;
 				percent.textContent = `${Math.round(value * 100)}%`;
-				status.textContent = value > 0.82 ? "Entering match" : value > 0.48 ? "Loading strikers" : "Preparing pitch";
+				status.textContent = value > 0.82 ? "Entering match" : value > 0.42 ? "Loading match" : "Loading engine";
 			}
 
 			function showError(message) {

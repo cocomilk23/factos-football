@@ -54,6 +54,7 @@ jobs:
           cp web/static/loading-bgm.mp3 build/loading-bgm.mp3
           echo "factos.stylerewrite.xyz" > build/CNAME
           touch build/.nojekyll
+          du -h build/index.pck build/index.wasm build/loading-bg.jpg build/loading-bgm.mp3
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

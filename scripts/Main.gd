@@ -169,8 +169,8 @@ func load_assets() -> void:
 
 
 func setup_audio() -> void:
-	menu_bgm_player = make_audio_player("res://music/background.mp3", MENU_BGM_BASE_DB)
-	bgm_player = make_audio_player("res://music/game-background.mp3", GAME_BGM_BASE_DB)
+	menu_bgm_player = make_audio_player("res://music/menu_bgm_loop.mp3", MENU_BGM_BASE_DB)
+	bgm_player = make_audio_player("res://music/game_bgm_loop.mp3", GAME_BGM_BASE_DB)
 	sfx_button = make_audio_player("res://music/button.mp3", -4.0)
 	sfx_kick = make_audio_player("res://music/kick.wav", 2.0)
 	sfx_hit = make_audio_player("res://assets/audio/hit.wav", -5.5)
