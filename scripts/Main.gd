@@ -154,15 +154,13 @@ func pause_button_style(fill: Color, border: Color) -> StyleBoxFlat:
 	var style = StyleBoxFlat.new()
 	style.bg_color = fill
 	style.border_color = border
-	style.set_border_width_all(2)
+	style.set_border_width_all(3)
 	style.content_margin_left = 6.0
 	style.content_margin_right = 6.0
 	style.content_margin_top = 6.0
 	style.content_margin_bottom = 6.0
-	style.corner_radius_top_left = 38.0
-	style.corner_radius_top_right = 38.0
-	style.corner_radius_bottom_left = 38.0
-	style.corner_radius_bottom_right = 38.0
+	style.set_corner_radius_all(40)
+	style.corner_detail = 32
 	style.anti_aliasing = true
 	return style
 
@@ -2100,6 +2098,8 @@ func draw_ui() -> void:
 	draw_meter(Rect2(Vector2(326.0, 1220.0), Vector2(200.0, 22.0)), abs(aim_x), Color(0.22, 0.9, 1.0, 0.95))
 	draw_text_shadow(Vector2(536.0, 1242.0), "<" if aim_x < -0.08 else ">" if aim_x > 0.08 else "-", 24, Color(0.55, 0.96, 1.0))
 	draw_skill_panel()
+	draw_circle(Vector2(650.0, 130.0), 35.0, Color(0.92, 0.15, 0.08, 0.75))
+	draw_circle(Vector2(650.0, 130.0), 35.0, Color(1.0, 1.0, 1.0, 0.5), false, 2.5)
 
 	if feedback_timer > 0.0:
 		var fb_color = Color(1.0, 0.92, 0.12, min(feedback_timer, 1.0))
