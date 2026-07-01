@@ -40,6 +40,7 @@ var difficulty_defs: Array = [
 var character_frames: Dictionary = {}
 var neymar_roll_frames: Array = []
 var ronaldo_sweep_frames: Array = []
+var match_assets_loaded = false
 var menu_bgm_player: AudioStreamPlayer
 var bgm_player: AudioStreamPlayer
 var sfx_button: AudioStreamPlayer
@@ -110,19 +111,44 @@ var skill_banner_color = Color.WHITE
 func _ready() -> void:
 	rng.randomize()
 	font = ThemeDB.fallback_font
-	load_assets()
-	setup_audio()
+	load_menu_assets()
+	setup_menu_audio()
 	build_character_defs()
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	show_character_select()
 
 
-func load_assets() -> void:
+func load_menu_assets() -> void:
 	tex_field = load("res://assets/img/stadium_field.png")
+	tex_heart = load("res://assets/img/heart_icon.png")
+	character_frames = {
+		"messi": [
+			null,
+			null,
+			load("res://assets/img/player_messi_frame_2.png"),
+			null
+		],
+		"ronaldo": [
+			null,
+			null,
+			load("res://assets/img/player_ronaldo_frame_2.png"),
+			null
+		],
+		"neymar": [
+			null,
+			null,
+			load("res://assets/img/player_neymar_frame_2.png"),
+			null
+		]
+	}
+
+
+func ensure_match_assets_loaded() -> void:
+	if match_assets_loaded:
+		return
 	tex_ball = load("res://assets/img/ball_projectile.png")
 	tex_fire_ball = load("res://assets/img/fireball_projectile.png")
 	tex_perfect_impact = load("res://assets/img/perfect_impact.png")
-	tex_heart = load("res://assets/img/heart_icon.png")
 	tex_pierce_icon = load("res://assets/img/pierce_icon.png")
 	tex_slow_icon = load("res://assets/img/slow_icon.png")
 	tex_wowo = load("res://assets/img/skill_wowo.png")
@@ -166,12 +192,20 @@ func load_assets() -> void:
 		load("res://assets/img/skill_ronaldo_sweep_2.png"),
 		load("res://assets/img/skill_ronaldo_sweep_3.png")
 	]
+	setup_match_audio()
+	match_assets_loaded = true
 
 
-func setup_audio() -> void:
+func setup_menu_audio() -> void:
 	menu_bgm_player = make_audio_player("res://music/menu_bgm_loop.mp3", MENU_BGM_BASE_DB)
-	bgm_player = make_audio_player("res://music/game_bgm_loop.mp3", GAME_BGM_BASE_DB)
 	sfx_button = make_audio_player("res://music/button.mp3", -4.0)
+	apply_bgm_volume()
+
+
+func setup_match_audio() -> void:
+	if bgm_player != null:
+		return
+	bgm_player = make_audio_player("res://music/game_bgm_loop.mp3", GAME_BGM_BASE_DB)
 	sfx_kick = make_audio_player("res://music/kick.wav", 2.0)
 	sfx_hit = make_audio_player("res://assets/audio/hit.wav", -5.5)
 	sfx_skill_messi = make_audio_player("res://music/messi_wowo.mp3", -2.5)
@@ -358,6 +392,7 @@ func show_character_select() -> void:
 
 func restart_game() -> void:
 	unlock_audio()
+	ensure_match_assets_loaded()
 	game_mode = "play"
 	elapsed = 0.0
 	score = 0

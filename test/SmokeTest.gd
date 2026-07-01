@@ -3,9 +3,17 @@
 func _initialize() -> void:
 	var scene = load("res://scenes/main.tscn").instantiate()
 	root.add_child(scene)
-	scene.load_assets()
-	scene.setup_audio()
+	scene.load_menu_assets()
+	scene.setup_menu_audio()
 	scene.build_character_defs()
+	if scene.match_assets_loaded:
+		printerr("ASSERT FAIL: match assets loaded before gameplay")
+		quit(1)
+		return
+	if scene.menu_bgm_player.stream == null or scene.sfx_button.stream == null:
+		printerr("ASSERT FAIL: menu audio streams did not load")
+		quit(1)
+		return
 	scene.restart_game()
 
 	if scene.menu_bgm_player.stream == null or scene.bgm_player.stream == null or scene.sfx_button.stream == null or scene.sfx_kick.stream == null or scene.sfx_skill_messi.stream == null or scene.sfx_skill_ronaldo.stream == null or scene.sfx_skill_neymar.stream == null:
