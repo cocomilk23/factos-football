@@ -6,14 +6,6 @@
 	<title>$GODOT_PROJECT_NAME</title>
 	$GODOT_HEAD_INCLUDE
 	<style>
-		:root {
-			--field: #061a10;
-			--field-deep: #020806;
-			--cyan: #63e8ff;
-			--gold: #ffd34a;
-			--ink: #ecfff7;
-		}
-
 		* {
 			box-sizing: border-box;
 			-webkit-tap-highlight-color: transparent;
@@ -26,8 +18,8 @@
 			height: 100%;
 			min-height: 100dvh;
 			overflow: hidden;
-			background: var(--field-deep);
-			color: var(--ink);
+			background: #06140d;
+			color: #ecfff7;
 			touch-action: none;
 			overscroll-behavior: none;
 		}
@@ -38,200 +30,127 @@
 			width: 100vw;
 			height: 100vh;
 			height: 100dvh;
-			opacity: 0;
-			background: var(--field-deep);
-			transition: opacity 180ms ease;
+			background: #06140d;
 			image-rendering: pixelated;
-		}
-
-		#canvas.is-ready {
-			opacity: 1;
 		}
 
 		.loading-shell {
 			position: fixed;
 			inset: 0;
 			z-index: 20;
-			display: grid;
-			place-items: stretch;
-			overflow: hidden;
-			background:
-				radial-gradient(ellipse at 50% 28%, rgba(99, 232, 255, 0.16), transparent 34%),
-				linear-gradient(180deg, rgba(2, 8, 6, 0.06), rgba(2, 8, 6, 0.78)),
-				repeating-linear-gradient(90deg, rgba(66, 126, 54, 0.3) 0 68px, rgba(18, 74, 42, 0.3) 68px 136px),
-				linear-gradient(180deg, #0d4b2a, var(--field) 58%, var(--field-deep));
-			transition: opacity 220ms ease;
-		}
-
-		.loading-shell::before {
-			content: "";
-			position: absolute;
-			inset: 8% 8% 14%;
-			border: 1px solid rgba(236, 255, 247, 0.18);
-			border-left-color: rgba(236, 255, 247, 0.08);
-			border-right-color: rgba(236, 255, 247, 0.08);
-			pointer-events: none;
-		}
-
-		.loading-shell::after {
-			content: "";
-			position: absolute;
-			left: 50%;
-			top: 10%;
-			bottom: 14%;
-			width: 1px;
-			background: linear-gradient(180deg, transparent, rgba(236, 255, 247, 0.18), transparent);
-			pointer-events: none;
-		}
-
-		.loading-shell.is-done {
-			opacity: 0;
-			pointer-events: none;
-		}
-
-		.loader-content {
-			position: relative;
-			z-index: 1;
 			display: flex;
-			flex-direction: column;
-			justify-content: center;
 			align-items: center;
-			width: 100%;
-			height: 100%;
-			padding: max(42px, env(safe-area-inset-top)) 28px max(42px, env(safe-area-inset-bottom));
+			justify-content: center;
+			padding: max(28px, env(safe-area-inset-top)) 28px max(28px, env(safe-area-inset-bottom));
+			background:
+				radial-gradient(ellipse at 50% 33%, rgba(101, 236, 255, 0.12), transparent 34%),
+				repeating-linear-gradient(90deg, rgba(82, 142, 58, 0.26) 0 54px, rgba(20, 78, 43, 0.26) 54px 108px),
+				linear-gradient(180deg, #0c4a2b, #05140d 70%, #020605);
 		}
 
-		.brand-block {
-			width: min(560px, calc(100vw - 56px));
-			margin-bottom: 52px;
-			text-align: center;
+		.loading-card {
+			width: min(420px, calc(100vw - 56px));
 		}
 
 		.brand-kicker {
-			margin-bottom: 12px;
-			font-family: Consolas, Menlo, monospace;
-			font-size: clamp(12px, 3vw, 15px);
-			letter-spacing: 0.2em;
-			color: var(--cyan);
+			margin-bottom: 10px;
+			font-family: Arial, system-ui, sans-serif;
+			font-size: 12px;
+			font-weight: 700;
+			letter-spacing: 0.18em;
+			text-align: center;
 			text-transform: uppercase;
+			color: #63e8ff;
 		}
 
 		.brand-title {
-			margin: 0;
-			font-family: "Arial Black", Impact, system-ui, sans-serif;
-			font-size: clamp(42px, 11vw, 72px);
-			line-height: 0.92;
+			margin: 0 0 34px;
+			font-family: Impact, "Arial Black", system-ui, sans-serif;
+			font-size: clamp(44px, 12vw, 68px);
+			line-height: 0.9;
 			letter-spacing: 0.02em;
+			text-align: center;
 			text-transform: uppercase;
-			text-shadow: 0 4px 0 rgba(0, 0, 0, 0.55);
+			text-shadow: 0 4px 0 rgba(0, 0, 0, 0.52);
 		}
 
 		.brand-title span {
-			color: var(--gold);
-		}
-
-		.loader-bottom {
-			display: flex;
-			flex-direction: column;
-			gap: 12px;
-			width: min(520px, calc(100vw - 56px));
+			color: #ffd34a;
 		}
 
 		.status-row {
 			display: flex;
 			align-items: center;
 			justify-content: space-between;
-			gap: 16px;
-			font-family: Consolas, Menlo, monospace;
-			font-size: 13px;
+			gap: 14px;
+			margin-bottom: 10px;
+			font: 700 12px/1.2 Arial, system-ui, sans-serif;
 			letter-spacing: 0.08em;
 			text-transform: uppercase;
 		}
 
-		.status-copy {
-			color: #d7fff6;
-		}
-
 		.status-percent {
-			color: var(--gold);
+			color: #ffd34a;
 			font-variant-numeric: tabular-nums;
 		}
 
 		.progress-track {
-			position: relative;
-			width: 100%;
-			height: 10px;
+			height: 8px;
 			overflow: hidden;
-			background: rgba(0, 0, 0, 0.42);
+			background: rgba(0, 0, 0, 0.46);
 			border: 1px solid rgba(236, 255, 247, 0.28);
 		}
 
 		.progress-fill {
 			width: 100%;
 			height: 100%;
-			transform: scaleX(0.04);
+			transform: scaleX(0.02);
 			transform-origin: left center;
-			background: linear-gradient(90deg, var(--cyan), var(--gold));
-			transition: transform 140ms ease-out;
+			background: linear-gradient(90deg, #63e8ff, #ffd34a);
 		}
 
-		.loading-shell.is-indeterminate .progress-fill {
-			animation: indeterminate 1s ease-in-out infinite alternate;
+		.loading-shell.is-done {
+			display: none;
 		}
 
 		.error-card {
 			display: none;
-			margin-top: 4px;
+			margin-top: 12px;
 			padding: 10px;
 			background: rgba(255, 74, 61, 0.18);
 			border: 1px solid rgba(255, 74, 61, 0.65);
 			color: #ffe2df;
-			font: 13px/1.4 Consolas, Menlo, monospace;
+			font: 13px/1.4 Arial, system-ui, sans-serif;
 		}
 
 		.loading-shell.has-error .error-card {
 			display: block;
-		}
-
-		@keyframes indeterminate {
-			from { transform: translateX(-28%) scaleX(0.28); }
-			to { transform: translateX(64%) scaleX(0.34); }
 		}
 	</style>
 </head>
 <body>
 	<canvas id="canvas">Your browser does not support HTML5 canvas.</canvas>
 
-	<div id="loading-shell" class="loading-shell is-indeterminate" aria-live="polite">
-		<div class="loader-content">
-			<header class="brand-block">
-				<div class="brand-kicker">Volley Survival</div>
-				<h1 class="brand-title">FACTOS <span>FOOTBALL</span></h1>
-			</header>
-
-			<section class="loader-bottom">
-				<div class="status-row">
-					<div id="loading-status" class="status-copy">Starting engine</div>
-					<div id="loading-percent" class="status-percent">0%</div>
-				</div>
-				<div class="progress-track">
-					<div id="loading-progress" class="progress-fill"></div>
-				</div>
-				<div id="loading-error" class="error-card"></div>
-			</section>
+	<div id="loading-shell" class="loading-shell" aria-live="polite">
+		<div class="loading-card">
+			<div class="brand-kicker">Volley Survival</div>
+			<h1 class="brand-title">FACTOS <span>FOOTBALL</span></h1>
+			<div class="status-row">
+				<div id="loading-status">Loading engine</div>
+				<div id="loading-percent" class="status-percent">0%</div>
+			</div>
+			<div class="progress-track">
+				<div id="loading-progress" class="progress-fill"></div>
+			</div>
+			<div id="loading-error" class="error-card"></div>
 		</div>
 	</div>
 
-	<noscript>
-		<style>
-			#loading-error { display: block; }
-		</style>
-		JavaScript is required to run this game.
-	</noscript>
+	<noscript>JavaScript is required to run this game.</noscript>
 
 	<script src="$GODOT_URL"></script>
 	<script>
-		(async () => {
+		(() => {
 			const GODOT_CONFIG = $GODOT_CONFIG;
 			const GODOT_THREADS_ENABLED = $GODOT_THREADS_ENABLED;
 			const shell = document.getElementById("loading-shell");
@@ -240,36 +159,7 @@
 			const status = document.getElementById("loading-status");
 			const percent = document.getElementById("loading-percent");
 			const errorBox = document.getElementById("loading-error");
-			let actualProgress = 0;
-			let visualProgress = 0;
-			let bootDone = false;
-			let progressFrame = 0;
-			const bootStartedAt = performance.now();
-			let lastProgressAt = bootStartedAt;
-			let lastProgressValue = 0;
-
-			async function clearLegacyWebCache() {
-				const hadController = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
-				if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
-					try {
-						const registrations = await navigator.serviceWorker.getRegistrations();
-						await Promise.all(registrations.map((registration) => registration.unregister()));
-					} catch (err) {
-						console.warn("Service worker cleanup skipped", err);
-					}
-				}
-				if (window.caches && caches.keys) {
-					try {
-						const keys = await caches.keys();
-						await Promise.all(keys
-							.filter((key) => key.indexOf("Volley Shot Surv-sw-cache-") === 0)
-							.map((key) => caches.delete(key)));
-					} catch (err) {
-						console.warn("Cache cleanup skipped", err);
-					}
-				}
-				return hadController && sessionStorage.getItem("factos_sw_refresh_done") !== "1";
-			}
+			let lastValue = 0;
 
 			if (!GODOT_THREADS_ENABLED) {
 				GODOT_CONFIG.ensureCrossOriginIsolationHeaders = false;
@@ -277,70 +167,14 @@
 				GODOT_CONFIG.godotPoolSize = 0;
 			}
 
-			function progressLabel(value, elapsed, idleSeconds) {
-				if (value >= 0.9) {
-					return "Entering match";
-				}
-				if (value >= 0.78 && idleSeconds > 4) {
-					return "Starting match";
-				}
-				if (elapsed > 12 && idleSeconds > 4) {
-					return "Compiling engine";
-				}
-				if (value > 0.42) {
-					return "Loading match";
-				}
-				return elapsed > 2 ? "Loading engine" : "Starting engine";
-			}
-
-			function renderProgress(value) {
-				const now = performance.now();
-				const elapsed = (now - bootStartedAt) / 1000;
-				const idleSeconds = (now - lastProgressAt) / 1000;
-				const waitingOnEngine = idleSeconds > 4 && actualProgress >= 0.76 && !bootDone;
-				shell.classList.remove("is-indeterminate");
-				fill.style.transform = `scaleX(${value})`;
-				percent.textContent = waitingOnEngine ? "..." : `${Math.round(value * 100)}%`;
-				status.textContent = progressLabel(value, elapsed, idleSeconds);
-			}
-
-			function estimatedMobileFloor(elapsed) {
-				if (elapsed > 10) {
-					return 0.34;
-				}
-				if (elapsed > 3) {
-					return 0.18;
-				}
-				if (elapsed > 0.8) {
-					return 0.08;
-				}
-				return 0.04;
-			}
-
-			function animateProgress() {
-				if (bootDone) {
-					return;
-				}
-				const elapsed = (performance.now() - bootStartedAt) / 1000;
-				const target = Math.min(0.9, Math.max(actualProgress, estimatedMobileFloor(elapsed)));
-				const alpha = target > visualProgress ? 0.055 : 0.018;
-				visualProgress += (target - visualProgress) * alpha;
-				visualProgress = Math.max(0.04, Math.min(0.9, visualProgress));
-				renderProgress(visualProgress);
-				progressFrame = requestAnimationFrame(animateProgress);
-			}
-
 			function setProgress(current, total) {
 				if (!total || total <= 0) {
-					actualProgress = Math.max(actualProgress, 0.02);
 					return;
 				}
-				const nextProgress = Math.max(0.04, Math.min(1, current / total));
-				if (nextProgress > lastProgressValue + 0.002) {
-					lastProgressAt = performance.now();
-					lastProgressValue = nextProgress;
-				}
-				actualProgress = Math.max(actualProgress, nextProgress);
+				lastValue = Math.max(lastValue, Math.min(1, current / total));
+				fill.style.transform = `scaleX(${Math.max(0.02, lastValue)})`;
+				percent.textContent = `${Math.round(lastValue * 100)}%`;
+				status.textContent = lastValue > 0.72 ? "Starting match" : "Loading engine";
 			}
 
 			function showError(message) {
@@ -350,44 +184,23 @@
 				errorBox.textContent = message;
 			}
 
-			if (await clearLegacyWebCache()) {
-				sessionStorage.setItem("factos_sw_refresh_done", "1");
-				status.textContent = "Refreshing cache";
-				percent.textContent = "0%";
-				location.reload();
-				return;
-			}
-
-			progressFrame = requestAnimationFrame(animateProgress);
-
 			const missing = Engine.getMissingFeatures({
 				threads: GODOT_THREADS_ENABLED,
 			});
 
 			if (missing.length !== 0) {
-				cancelAnimationFrame(progressFrame);
 				showError("This browser is missing: " + missing.join(", ") + ". Use HTTPS and a modern mobile browser.");
 				return;
 			}
 
-			const engine = new Engine(GODOT_CONFIG);
-			engine.startGame({
+			new Engine(GODOT_CONFIG).startGame({
 				canvas,
 				onProgress: setProgress,
 			}).then(() => {
-				bootDone = true;
-				cancelAnimationFrame(progressFrame);
-				actualProgress = 1;
-				visualProgress = 1;
-				renderProgress(1);
-				canvas.classList.add("is-ready");
-				window.setTimeout(() => {
-					shell.classList.add("is-done");
-					window.setTimeout(() => shell.remove(), 220);
-				}, 60);
+				fill.style.transform = "scaleX(1)";
+				percent.textContent = "100%";
+				shell.classList.add("is-done");
 			}).catch((err) => {
-				bootDone = true;
-				cancelAnimationFrame(progressFrame);
 				showError(err && err.message ? err.message : String(err));
 				console.error(err);
 			});
