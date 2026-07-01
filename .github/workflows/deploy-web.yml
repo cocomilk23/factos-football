@@ -50,7 +50,6 @@ jobs:
           set -eux
           mkdir -p build
           /tmp/godot/Godot_v4.7-stable_linux.x86_64 --headless --path . --export-release Web build/index.html
-          cp web/static/disable-service-worker.js build/index.service.worker.js
           echo "factos.stylerewrite.xyz" > build/CNAME
           touch build/.nojekyll
           du -h build/index.pck build/index.wasm
