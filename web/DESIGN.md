@@ -1,6 +1,6 @@
 ## Style Prompt
 
-Factos Football uses a premium mobile pixel-art sports style: cinematic night training pitch, crisp grass texture, teal stadium light, warm golden volley energy, and small red enemy accents. The loading shell should feel like the game is already alive before Godot finishes booting.
+Factos Football uses a fast mobile-first loading shell: lightweight CSS-only night pitch, crisp title, simple progress, and no external visual or audio assets before Godot boots.
 
 ## Colors
 
@@ -18,8 +18,8 @@ Factos Football uses a premium mobile pixel-art sports style: cinematic night tr
 ## Motion
 
 - Deterministic CSS motion only. No random drift.
-- Keep the shell fast: static background image, crisp title, and lightweight progress only.
-- Do not add decorative balls, shot trails, scanlines, or background scale animations to the loader.
+- Keep the shell fast: CSS-only background, crisp title, and lightweight progress only.
+- Do not add decorative balls, shot trails, scanlines, background images, loading music, or background scale animations to the loader.
 - Loading progress must remain legible and calm, not noisy.
 
 ## What Not To Do

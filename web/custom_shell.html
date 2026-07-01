@@ -5,14 +5,12 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 	<title>$GODOT_PROJECT_NAME</title>
 	$GODOT_HEAD_INCLUDE
-	<link rel="preload" as="image" href="loading-bg.jpg">
 	<style>
 		:root {
-			--field-night: #03170f;
-			--grass-shadow: #0b3520;
-			--stadium-cyan: #63e8ff;
-			--volley-gold: #ffd34a;
-			--enemy-red: #ff4a3d;
+			--field: #061a10;
+			--field-deep: #020806;
+			--cyan: #63e8ff;
+			--gold: #ffd34a;
 			--ink: #ecfff7;
 		}
 
@@ -28,7 +26,7 @@
 			height: 100%;
 			min-height: 100dvh;
 			overflow: hidden;
-			background: var(--field-night);
+			background: var(--field-deep);
 			color: var(--ink);
 			touch-action: none;
 			overscroll-behavior: none;
@@ -41,8 +39,8 @@
 			height: 100vh;
 			height: 100dvh;
 			opacity: 0;
-			background: var(--field-night);
-			transition: opacity 360ms ease;
+			background: var(--field-deep);
+			transition: opacity 180ms ease;
 			image-rendering: pixelated;
 		}
 
@@ -56,103 +54,96 @@
 			z-index: 20;
 			display: grid;
 			place-items: stretch;
-			background:
-				radial-gradient(circle at 50% 58%, rgba(255, 211, 74, 0.22), transparent 25%),
-				radial-gradient(circle at 48% 16%, rgba(99, 232, 255, 0.18), transparent 32%),
-				var(--field-night);
 			overflow: hidden;
-			transition: opacity 520ms ease, transform 520ms ease;
+			background:
+				radial-gradient(ellipse at 50% 28%, rgba(99, 232, 255, 0.16), transparent 34%),
+				linear-gradient(180deg, rgba(2, 8, 6, 0.06), rgba(2, 8, 6, 0.78)),
+				repeating-linear-gradient(90deg, rgba(66, 126, 54, 0.3) 0 68px, rgba(18, 74, 42, 0.3) 68px 136px),
+				linear-gradient(180deg, #0d4b2a, var(--field) 58%, var(--field-deep));
+			transition: opacity 220ms ease;
+		}
+
+		.loading-shell::before {
+			content: "";
+			position: absolute;
+			inset: 8% 8% 14%;
+			border: 1px solid rgba(236, 255, 247, 0.18);
+			border-left-color: rgba(236, 255, 247, 0.08);
+			border-right-color: rgba(236, 255, 247, 0.08);
+			pointer-events: none;
+		}
+
+		.loading-shell::after {
+			content: "";
+			position: absolute;
+			left: 50%;
+			top: 10%;
+			bottom: 14%;
+			width: 1px;
+			background: linear-gradient(180deg, transparent, rgba(236, 255, 247, 0.18), transparent);
+			pointer-events: none;
 		}
 
 		.loading-shell.is-done {
 			opacity: 0;
-			transform: scale(1.025);
-			pointer-events: none;
-		}
-
-		.loader-bg {
-			position: absolute;
-			inset: 0;
-			background-image:
-				linear-gradient(180deg, rgba(1, 7, 7, 0.08), rgba(1, 7, 7, 0.58) 78%, rgba(1, 7, 7, 0.82)),
-				url("loading-bg.jpg");
-			background-size: cover;
-			background-position: center;
-			image-rendering: auto;
-			filter: saturate(1.05) contrast(1.02);
-		}
-
-		.loader-vignette {
-			position: absolute;
-			inset: 0;
-			background:
-				linear-gradient(90deg, rgba(0, 0, 0, 0.58), transparent 20%, transparent 80%, rgba(0, 0, 0, 0.58)),
-				radial-gradient(ellipse at 50% 56%, transparent 34%, rgba(0, 0, 0, 0.58) 100%);
 			pointer-events: none;
 		}
 
 		.loader-content {
 			position: relative;
-			z-index: 2;
+			z-index: 1;
 			display: flex;
 			flex-direction: column;
-			justify-content: space-between;
+			justify-content: center;
+			align-items: center;
 			width: 100%;
 			height: 100%;
-			padding: max(48px, env(safe-area-inset-top)) 30px max(40px, env(safe-area-inset-bottom));
+			padding: max(42px, env(safe-area-inset-top)) 28px max(42px, env(safe-area-inset-bottom));
 		}
 
 		.brand-block {
-			padding-top: 44px;
+			width: min(560px, calc(100vw - 56px));
+			margin-bottom: 52px;
 			text-align: center;
-			text-shadow: 0 4px 0 rgba(0, 0, 0, 0.72), 0 0 22px rgba(99, 232, 255, 0.34);
-			animation: title-rise 620ms cubic-bezier(0.19, 1, 0.22, 1) both;
+		}
+
+		.brand-kicker {
+			margin-bottom: 12px;
+			font-family: Consolas, Menlo, monospace;
+			font-size: clamp(12px, 3vw, 15px);
+			letter-spacing: 0.2em;
+			color: var(--cyan);
+			text-transform: uppercase;
 		}
 
 		.brand-title {
 			margin: 0;
 			font-family: "Arial Black", Impact, system-ui, sans-serif;
-			font-size: clamp(46px, 12vw, 82px);
-			line-height: 0.9;
+			font-size: clamp(42px, 11vw, 72px);
+			line-height: 0.92;
 			letter-spacing: 0.02em;
 			text-transform: uppercase;
+			text-shadow: 0 4px 0 rgba(0, 0, 0, 0.55);
 		}
 
 		.brand-title span {
-			color: var(--volley-gold);
-		}
-
-		.brand-subtitle {
-			margin-top: 12px;
-			font-family: Consolas, Menlo, monospace;
-			font-size: clamp(13px, 3.4vw, 18px);
-			letter-spacing: 0.18em;
-			color: #aaf6ff;
-			text-transform: uppercase;
+			color: var(--gold);
 		}
 
 		.loader-bottom {
-			position: relative;
 			display: flex;
 			flex-direction: column;
-			gap: 14px;
-			width: min(560px, calc(100vw - 60px));
-			margin: 0 auto 34px;
-			padding: 18px 18px 20px;
-			background: rgba(2, 17, 13, 0.68);
-			border: 2px solid rgba(99, 232, 255, 0.35);
-			box-shadow: 0 14px 38px rgba(0, 0, 0, 0.35), inset 0 0 28px rgba(99, 232, 255, 0.08);
-			backdrop-filter: blur(3px);
-			animation: panel-in 620ms cubic-bezier(0.19, 1, 0.22, 1) 140ms both;
+			gap: 12px;
+			width: min(520px, calc(100vw - 56px));
 		}
 
 		.status-row {
 			display: flex;
 			align-items: center;
 			justify-content: space-between;
-			gap: 18px;
+			gap: 16px;
 			font-family: Consolas, Menlo, monospace;
-			font-size: 14px;
+			font-size: 13px;
 			letter-spacing: 0.08em;
 			text-transform: uppercase;
 		}
@@ -162,18 +153,17 @@
 		}
 
 		.status-percent {
-			color: var(--volley-gold);
+			color: var(--gold);
 			font-variant-numeric: tabular-nums;
 		}
 
 		.progress-track {
 			position: relative;
 			width: 100%;
-			height: 16px;
-			padding: 3px;
+			height: 10px;
 			overflow: hidden;
-			background: rgba(1, 7, 6, 0.92);
-			border: 1px solid rgba(236, 255, 247, 0.36);
+			background: rgba(0, 0, 0, 0.42);
+			border: 1px solid rgba(236, 255, 247, 0.28);
 		}
 
 		.progress-fill {
@@ -181,21 +171,18 @@
 			height: 100%;
 			transform: scaleX(0.04);
 			transform-origin: left center;
-			background:
-				linear-gradient(90deg, var(--stadium-cyan), var(--volley-gold)),
-				repeating-linear-gradient(90deg, transparent 0, transparent 18px, rgba(255,255,255,0.28) 18px, rgba(255,255,255,0.28) 22px);
-			box-shadow: 0 0 18px rgba(255, 211, 74, 0.64);
-			transition: transform 180ms ease-out;
+			background: linear-gradient(90deg, var(--cyan), var(--gold));
+			transition: transform 140ms ease-out;
 		}
 
 		.loading-shell.is-indeterminate .progress-fill {
-			animation: indeterminate 1.1s ease-in-out infinite alternate;
+			animation: indeterminate 1s ease-in-out infinite alternate;
 		}
 
 		.error-card {
 			display: none;
 			margin-top: 4px;
-			padding: 12px;
+			padding: 10px;
 			background: rgba(255, 74, 61, 0.18);
 			border: 1px solid rgba(255, 74, 61, 0.65);
 			color: #ffe2df;
@@ -206,16 +193,6 @@
 			display: block;
 		}
 
-		@keyframes title-rise {
-			from { opacity: 0; transform: translateY(28px) scale(0.98); }
-			to { opacity: 1; transform: translateY(0) scale(1); }
-		}
-
-		@keyframes panel-in {
-			from { opacity: 0; transform: translateY(34px); }
-			to { opacity: 1; transform: translateY(0); }
-		}
-
 		@keyframes indeterminate {
 			from { transform: translateX(-28%) scaleX(0.28); }
 			to { transform: translateX(64%) scaleX(0.34); }
@@ -224,16 +201,12 @@
 </head>
 <body>
 	<canvas id="canvas">Your browser does not support HTML5 canvas.</canvas>
-	<audio id="loading-bgm" src="loading-bgm.mp3" loop preload="none"></audio>
 
 	<div id="loading-shell" class="loading-shell is-indeterminate" aria-live="polite">
-		<div class="loader-bg"></div>
-		<div class="loader-vignette"></div>
-
 		<div class="loader-content">
 			<header class="brand-block">
+				<div class="brand-kicker">Volley Survival</div>
 				<h1 class="brand-title">FACTOS <span>FOOTBALL</span></h1>
-				<div class="brand-subtitle">Volley Survival</div>
 			</header>
 
 			<section class="loader-bottom">
@@ -267,46 +240,12 @@
 			const status = document.getElementById("loading-status");
 			const percent = document.getElementById("loading-percent");
 			const errorBox = document.getElementById("loading-error");
-			const loadingBgm = document.getElementById("loading-bgm");
-			let loadingBgmActive = true;
-			let loadingBgmStarted = false;
-
-			function tryStartLoadingMusic() {
-				if (!loadingBgmActive || !loadingBgm || loadingBgmStarted) {
-					return;
-				}
-				loadingBgmStarted = true;
-				loadingBgm.volume = 0.42;
-				const playPromise = loadingBgm.play();
-				if (playPromise && typeof playPromise.catch === "function") {
-					playPromise.catch(() => {
-						loadingBgmStarted = false;
-					});
-				}
-			}
-
-			function stopLoadingMusic() {
-				loadingBgmActive = false;
-				window.removeEventListener("pointerdown", tryStartLoadingMusic);
-				window.removeEventListener("touchstart", tryStartLoadingMusic);
-				window.removeEventListener("keydown", tryStartLoadingMusic);
-				if (!loadingBgm) {
-					return;
-				}
-				loadingBgm.pause();
-				loadingBgm.currentTime = 0;
-			}
-
-			window.addEventListener("pointerdown", tryStartLoadingMusic, { passive: true });
-			window.addEventListener("touchstart", tryStartLoadingMusic, { passive: true });
-			window.addEventListener("keydown", tryStartLoadingMusic);
-			tryStartLoadingMusic();
 
 			async function clearLegacyWebCache() {
-				var hadController = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
+				const hadController = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
 				if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
 					try {
-						var registrations = await navigator.serviceWorker.getRegistrations();
+						const registrations = await navigator.serviceWorker.getRegistrations();
 						await Promise.all(registrations.map((registration) => registration.unregister()));
 					} catch (err) {
 						console.warn("Service worker cleanup skipped", err);
@@ -314,7 +253,7 @@
 				}
 				if (window.caches && caches.keys) {
 					try {
-						var keys = await caches.keys();
+						const keys = await caches.keys();
 						await Promise.all(keys
 							.filter((key) => key.indexOf("Volley Shot Surv-sw-cache-") === 0)
 							.map((key) => caches.delete(key)));
@@ -370,12 +309,10 @@
 				setProgress(1, 1);
 				canvas.classList.add("is-ready");
 				window.setTimeout(() => {
-					stopLoadingMusic();
 					shell.classList.add("is-done");
-					window.setTimeout(() => shell.remove(), 320);
-				}, 80);
+					window.setTimeout(() => shell.remove(), 220);
+				}, 60);
 			}).catch((err) => {
-				stopLoadingMusic();
 				showError(err && err.message ? err.message : String(err));
 				console.error(err);
 			});
