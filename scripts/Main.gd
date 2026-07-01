@@ -54,6 +54,8 @@ var audio_unlocked = false
 var bgm_volume = 0.72
 var settings_open = false
 var volume_dragging = false
+var pause_button_layer: CanvasLayer
+var pause_menu_button: Button
 
 var game_mode = "select"
 var selected_character = 0
@@ -114,8 +116,64 @@ func _ready() -> void:
 	load_menu_assets()
 	setup_menu_audio()
 	build_character_defs()
+	setup_pause_menu_button()
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	show_character_select()
+
+
+func setup_pause_menu_button() -> void:
+	if pause_menu_button != null:
+		return
+	pause_button_layer = CanvasLayer.new()
+	pause_button_layer.layer = 40
+	add_child(pause_button_layer)
+
+	var button_rect = pause_menu_button_rect()
+	pause_menu_button = Button.new()
+	pause_menu_button.name = "PauseMenuButton"
+	pause_menu_button.text = "II\nMENU"
+	pause_menu_button.position = button_rect.position
+	pause_menu_button.size = button_rect.size
+	pause_menu_button.custom_minimum_size = button_rect.size
+	pause_menu_button.focus_mode = Control.FOCUS_NONE
+	pause_menu_button.mouse_filter = Control.MOUSE_FILTER_STOP
+	pause_menu_button.add_theme_font_size_override("font_size", 16)
+	pause_menu_button.add_theme_color_override("font_color", Color(0.83, 1.0, 1.0))
+	pause_menu_button.add_theme_color_override("font_pressed_color", Color(1.0, 0.92, 0.3))
+	pause_menu_button.add_theme_color_override("font_hover_color", Color(0.95, 1.0, 1.0))
+	pause_menu_button.add_theme_stylebox_override("normal", pause_button_style(Color(0.02, 0.04, 0.06, 0.82), Color(0.45, 0.96, 1.0, 0.62)))
+	pause_menu_button.add_theme_stylebox_override("hover", pause_button_style(Color(0.03, 0.08, 0.1, 0.9), Color(0.55, 1.0, 1.0, 0.82)))
+	pause_menu_button.add_theme_stylebox_override("pressed", pause_button_style(Color(0.05, 0.1, 0.12, 0.94), Color(1.0, 0.9, 0.28, 0.92)))
+	pause_menu_button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	pause_menu_button.pressed.connect(_on_pause_menu_button_pressed)
+	pause_button_layer.add_child(pause_menu_button)
+	update_pause_button_state()
+
+
+func pause_button_style(fill: Color, border: Color) -> StyleBoxFlat:
+	var style = StyleBoxFlat.new()
+	style.bg_color = fill
+	style.border_color = border
+	style.set_border_width_all(2)
+	style.content_margin_left = 6.0
+	style.content_margin_right = 6.0
+	style.content_margin_top = 6.0
+	style.content_margin_bottom = 6.0
+	return style
+
+
+func _on_pause_menu_button_pressed() -> void:
+	if game_mode == "select" or game_over or settings_open:
+		return
+	open_settings_menu()
+
+
+func update_pause_button_state() -> void:
+	if pause_menu_button == null:
+		return
+	var should_show = game_mode == "play" and not game_over and not settings_open
+	pause_menu_button.visible = should_show
+	pause_menu_button.disabled = not should_show
 
 
 func load_menu_assets() -> void:
@@ -387,6 +445,7 @@ func show_character_select() -> void:
 	settings_open = false
 	volume_dragging = false
 	update_audio_state()
+	update_pause_button_state()
 	queue_redraw()
 
 
@@ -440,6 +499,7 @@ func restart_game() -> void:
 	shake_time = 0.0
 	shake_amount = 0.0
 	update_audio_state()
+	update_pause_button_state()
 	queue_redraw()
 
 
@@ -662,6 +722,7 @@ func open_settings_menu() -> void:
 	charge = 0.0
 	gesture_time = 0.0
 	swipe_points.clear()
+	update_pause_button_state()
 	queue_redraw()
 
 
@@ -669,6 +730,7 @@ func close_settings_menu() -> void:
 	play_sfx(sfx_button)
 	settings_open = false
 	volume_dragging = false
+	update_pause_button_state()
 	queue_redraw()
 
 
@@ -947,6 +1009,7 @@ func segments_intersect(a: Vector2, b: Vector2, c: Vector2, d: Vector2) -> bool:
 
 func _process(delta: float) -> void:
 	update_audio_state()
+	update_pause_button_state()
 	if game_mode == "select":
 		queue_redraw()
 		return
@@ -2033,7 +2096,6 @@ func draw_ui() -> void:
 	draw_meter(Rect2(Vector2(326.0, 1220.0), Vector2(200.0, 22.0)), abs(aim_x), Color(0.22, 0.9, 1.0, 0.95))
 	draw_text_shadow(Vector2(536.0, 1242.0), "<" if aim_x < -0.08 else ">" if aim_x > 0.08 else "-", 24, Color(0.55, 0.96, 1.0))
 	draw_skill_panel()
-	draw_settings_button()
 
 	if feedback_timer > 0.0:
 		var fb_color = Color(1.0, 0.92, 0.12, min(feedback_timer, 1.0))
@@ -2170,6 +2232,10 @@ func draw_settings_action_button(rect: Rect2, label: String, color: Color) -> vo
 
 func skill_panel_rect() -> Rect2:
 	return Rect2(Vector2(552.0, 1192.0), Vector2(146.0, 56.0))
+
+
+func pause_menu_button_rect() -> Rect2:
+	return Rect2(Vector2(604.0, 94.0), Vector2(114.0, 86.0))
 
 
 func settings_button_rect() -> Rect2:

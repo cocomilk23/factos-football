@@ -6,6 +6,7 @@ func _initialize() -> void:
 	scene.load_menu_assets()
 	scene.setup_menu_audio()
 	scene.build_character_defs()
+	scene.setup_pause_menu_button()
 	if scene.match_assets_loaded:
 		printerr("ASSERT FAIL: match assets loaded before gameplay")
 		quit(1)
@@ -69,6 +70,22 @@ func _initialize() -> void:
 		printerr("ASSERT FAIL: field touch incorrectly hit settings")
 		quit(1)
 		return
+	if scene.settings_open:
+		scene.close_settings_menu()
+	if scene.pause_menu_button == null or not scene.pause_menu_button.visible:
+		printerr("ASSERT FAIL: rebuilt pause button is not visible during gameplay mode=", scene.game_mode, " settings=", scene.settings_open, " game_over=", scene.game_over, " button_exists=", scene.pause_menu_button != null, " disabled=", scene.pause_menu_button.disabled if scene.pause_menu_button != null else true)
+		quit(1)
+		return
+	scene._on_pause_menu_button_pressed()
+	if not scene.settings_open:
+		printerr("ASSERT FAIL: rebuilt pause button did not open menu")
+		quit(1)
+		return
+	if scene.pause_menu_button.visible:
+		printerr("ASSERT FAIL: rebuilt pause button did not hide while paused")
+		quit(1)
+		return
+	scene.handle_settings_press(scene.settings_continue_rect().get_center())
 	if scene.shot_stock != scene.MAX_SHOT_STOCK or scene.active_ball.is_empty():
 		printerr("ASSERT FAIL: shot stock did not initialize")
 		quit(1)
