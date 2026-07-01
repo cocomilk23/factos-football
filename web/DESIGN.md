@@ -18,8 +18,8 @@ Factos Football uses a premium mobile pixel-art sports style: cinematic night tr
 ## Motion
 
 - Deterministic CSS motion only. No random drift.
-- Ambient scanlines and subtle pitch breathing.
-- The ball pulses and rises along the same center-lane energy as the game shot fantasy.
+- Keep the shell fast: static background image, crisp title, and lightweight progress only.
+- Do not add decorative balls, shot trails, scanlines, or background scale animations to the loader.
 - Loading progress must remain legible and calm, not noisy.
 
 ## What Not To Do
