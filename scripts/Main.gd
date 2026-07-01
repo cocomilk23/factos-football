@@ -166,6 +166,7 @@ func _on_pause_menu_button_pressed() -> void:
 	if game_mode == "select" or game_over or settings_open:
 		return
 	open_settings_menu()
+	get_viewport().set_input_as_handled()
 
 
 func update_pause_button_state() -> void:
@@ -671,6 +672,8 @@ func handle_settings_shortcut(event: InputEvent) -> bool:
 
 
 func is_settings_button_press(event: InputEvent) -> bool:
+	if pause_menu_button != null:
+		return false
 	var pos = settings_press_position(event)
 	if pos.x < 0.0:
 		return false
