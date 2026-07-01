@@ -675,7 +675,12 @@ func is_settings_button_press(event: InputEvent) -> bool:
 	if pos.x < 0.0:
 		return false
 	var game_pos = viewport_to_game_pos(pos)
-	return settings_button_touch_rect().has_point(pos) or settings_button_touch_rect().has_point(game_pos) or settings_viewport_button_hit(pos)
+	if game_pos.distance_to(settings_button_center()) <= settings_button_touch_radius():
+		return true
+	var vp_size = safe_viewport_size()
+	if vp_size.x > 1.0 and vp_size.y > 1.0:
+		return pos.x >= vp_size.x * 0.55 and pos.y <= vp_size.y * 0.35
+	return false
 
 
 func settings_press_position(event: InputEvent) -> Vector2:
@@ -693,15 +698,6 @@ func viewport_to_game_pos(pos: Vector2) -> Vector2:
 	return Vector2(pos.x * SCREEN_SIZE.x / viewport_size.x, pos.y * SCREEN_SIZE.y / viewport_size.y)
 
 
-func settings_viewport_button_hit(pos: Vector2) -> bool:
-	var viewport_size = safe_viewport_size()
-	if viewport_size.x <= 1.0 or viewport_size.y <= 1.0:
-		return false
-	var game_rect = settings_button_touch_rect()
-	var scale = Vector2(viewport_size.x / SCREEN_SIZE.x, viewport_size.y / SCREEN_SIZE.y)
-	var viewport_rect = Rect2(game_rect.position * scale, game_rect.size * scale)
-	var touch_padding = max(10.0, min(viewport_size.x, viewport_size.y) * 0.018)
-	return viewport_rect.grow(touch_padding).has_point(pos)
 
 
 func safe_viewport_size() -> Vector2:
@@ -2195,12 +2191,17 @@ func draw_skill_panel() -> void:
 
 
 func draw_settings_button() -> void:
-	var rect = settings_button_rect()
-	draw_panel(rect, Color(0.02, 0.04, 0.06, 0.78), Color(0.45, 0.96, 1.0, 0.5))
-	var center = rect.get_center()
-	draw_rect(Rect2(center + Vector2(-16.0, -16.0), Vector2(6.0, 24.0)), Color(0.85, 1.0, 1.0), true)
-	draw_rect(Rect2(center + Vector2(-4.0, -16.0), Vector2(6.0, 24.0)), Color(0.85, 1.0, 1.0), true)
-	draw_string(font, rect.position + Vector2(0.0, 50.0), "MENU", HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 13, Color(0.78, 1.0, 1.0))
+	var c = settings_button_center()
+	var r = settings_button_visual_radius()
+	draw_circle(c + Vector2(0.0, 3.0), r, Color(0.0, 0.0, 0.0, 0.42))
+	draw_circle(c, r, Color(0.02, 0.04, 0.06, 0.86))
+	draw_arc(c, r, 0.0, TAU, 32, Color(0.45, 0.96, 1.0, 0.62), 2.5)
+	var iw = 10.0
+	var idy = 5.5
+	var ic = Color(0.88, 1.0, 1.0)
+	draw_line(c + Vector2(-iw, -idy), c + Vector2(iw, -idy), ic, 2.5)
+	draw_line(c + Vector2(-iw, 0.0), c + Vector2(iw, 0.0), ic, 2.5)
+	draw_line(c + Vector2(-iw, idy), c + Vector2(iw, idy), ic, 2.5)
 
 
 func draw_settings_overlay() -> void:
@@ -2238,12 +2239,16 @@ func pause_menu_button_rect() -> Rect2:
 	return Rect2(Vector2(604.0, 94.0), Vector2(114.0, 86.0))
 
 
-func settings_button_rect() -> Rect2:
-	return Rect2(Vector2(616.0, 102.0), Vector2(90.0, 62.0))
+func settings_button_center() -> Vector2:
+	return Vector2(650.0, 130.0)
 
 
-func settings_button_touch_rect() -> Rect2:
-	return Rect2(Vector2(578.0, 76.0), Vector2(142.0, 116.0))
+func settings_button_visual_radius() -> float:
+	return 28.0
+
+
+func settings_button_touch_radius() -> float:
+	return 44.0
 
 
 func settings_panel_rect() -> Rect2:
