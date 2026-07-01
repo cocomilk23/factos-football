@@ -5,6 +5,8 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 	<title>$GODOT_PROJECT_NAME</title>
 	$GODOT_HEAD_INCLUDE
+	<link rel="preload" href="index.wasm" as="fetch" type="application/wasm" crossorigin>
+	<link rel="preload" href="index.pck" as="fetch" crossorigin>
 	<style>
 		:root {
 			--field: #061a10;
@@ -240,6 +242,11 @@
 			const status = document.getElementById("loading-status");
 			const percent = document.getElementById("loading-percent");
 			const errorBox = document.getElementById("loading-error");
+			let actualProgress = 0;
+			let visualProgress = 0;
+			let bootDone = false;
+			let progressFrame = 0;
+			const bootStartedAt = performance.now();
 
 			async function clearLegacyWebCache() {
 				const hadController = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
@@ -264,17 +271,68 @@
 				return hadController && sessionStorage.getItem("factos_sw_refresh_done") !== "1";
 			}
 
-			function setProgress(current, total) {
-				if (!total || total <= 0) {
-					shell.classList.add("is-indeterminate");
-					status.textContent = "Starting engine";
-					return;
+			function progressLabel(value, elapsed) {
+				if (value >= 0.9) {
+					return "Entering match";
 				}
-				const value = Math.max(0.04, Math.min(1, current / total));
+				if (elapsed > 12 && value < 0.78) {
+					return "Compiling engine";
+				}
+				if (value > 0.42) {
+					return "Loading match";
+				}
+				return elapsed > 2 ? "Loading engine" : "Starting engine";
+			}
+
+			function renderProgress(value) {
+				const elapsed = (performance.now() - bootStartedAt) / 1000;
 				shell.classList.remove("is-indeterminate");
 				fill.style.transform = `scaleX(${value})`;
 				percent.textContent = `${Math.round(value * 100)}%`;
-				status.textContent = value > 0.82 ? "Entering match" : value > 0.42 ? "Loading match" : "Loading engine";
+				status.textContent = progressLabel(value, elapsed);
+			}
+
+			function estimatedMobileFloor(elapsed) {
+				if (elapsed > 24) {
+					return 0.86;
+				}
+				if (elapsed > 18) {
+					return 0.78;
+				}
+				if (elapsed > 12) {
+					return 0.62;
+				}
+				if (elapsed > 7) {
+					return 0.38;
+				}
+				if (elapsed > 3) {
+					return 0.18;
+				}
+				if (elapsed > 0.8) {
+					return 0.08;
+				}
+				return 0.04;
+			}
+
+			function animateProgress() {
+				if (bootDone) {
+					return;
+				}
+				const elapsed = (performance.now() - bootStartedAt) / 1000;
+				const target = Math.min(0.9, Math.max(actualProgress, estimatedMobileFloor(elapsed)));
+				const alpha = target > visualProgress ? 0.055 : 0.018;
+				visualProgress += (target - visualProgress) * alpha;
+				visualProgress = Math.max(0.04, Math.min(0.9, visualProgress));
+				renderProgress(visualProgress);
+				progressFrame = requestAnimationFrame(animateProgress);
+			}
+
+			function setProgress(current, total) {
+				if (!total || total <= 0) {
+					actualProgress = Math.max(actualProgress, 0.02);
+					return;
+				}
+				actualProgress = Math.max(actualProgress, Math.max(0.04, Math.min(1, current / total)));
 			}
 
 			function showError(message) {
@@ -292,11 +350,14 @@
 				return;
 			}
 
+			progressFrame = requestAnimationFrame(animateProgress);
+
 			const missing = Engine.getMissingFeatures({
 				threads: GODOT_THREADS_ENABLED,
 			});
 
 			if (missing.length !== 0) {
+				cancelAnimationFrame(progressFrame);
 				showError("This browser is missing: " + missing.join(", ") + ". Use HTTPS and a modern mobile browser.");
 				return;
 			}
@@ -306,13 +367,19 @@
 				canvas,
 				onProgress: setProgress,
 			}).then(() => {
-				setProgress(1, 1);
+				bootDone = true;
+				cancelAnimationFrame(progressFrame);
+				actualProgress = 1;
+				visualProgress = 1;
+				renderProgress(1);
 				canvas.classList.add("is-ready");
 				window.setTimeout(() => {
 					shell.classList.add("is-done");
 					window.setTimeout(() => shell.remove(), 220);
 				}, 60);
 			}).catch((err) => {
+				bootDone = true;
+				cancelAnimationFrame(progressFrame);
 				showError(err && err.message ? err.message : String(err));
 				console.error(err);
 			});
