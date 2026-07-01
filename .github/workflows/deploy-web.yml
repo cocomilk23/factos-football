@@ -52,6 +52,7 @@ jobs:
           /tmp/godot/Godot_v4.7-stable_linux.x86_64 --headless --path . --export-release Web build/index.html
           cp web/static/loading-bg.jpg build/loading-bg.jpg
           cp web/static/loading-bgm.mp3 build/loading-bgm.mp3
+          cp web/static/disable-service-worker.js build/index.service.worker.js
           echo "factos.stylerewrite.xyz" > build/CNAME
           touch build/.nojekyll
           du -h build/index.pck build/index.wasm build/loading-bg.jpg build/loading-bgm.mp3

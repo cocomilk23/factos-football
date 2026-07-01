@@ -258,7 +258,7 @@
 
 	<script src="$GODOT_URL"></script>
 	<script>
-		(() => {
+		(async () => {
 			const GODOT_CONFIG = $GODOT_CONFIG;
 			const GODOT_THREADS_ENABLED = $GODOT_THREADS_ENABLED;
 			const shell = document.getElementById("loading-shell");
@@ -302,6 +302,29 @@
 			window.addEventListener("keydown", tryStartLoadingMusic);
 			tryStartLoadingMusic();
 
+			async function clearLegacyWebCache() {
+				var hadController = !!(navigator.serviceWorker && navigator.serviceWorker.controller);
+				if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+					try {
+						var registrations = await navigator.serviceWorker.getRegistrations();
+						await Promise.all(registrations.map((registration) => registration.unregister()));
+					} catch (err) {
+						console.warn("Service worker cleanup skipped", err);
+					}
+				}
+				if (window.caches && caches.keys) {
+					try {
+						var keys = await caches.keys();
+						await Promise.all(keys
+							.filter((key) => key.indexOf("Volley Shot Surv-sw-cache-") === 0)
+							.map((key) => caches.delete(key)));
+					} catch (err) {
+						console.warn("Cache cleanup skipped", err);
+					}
+				}
+				return hadController && sessionStorage.getItem("factos_sw_refresh_done") !== "1";
+			}
+
 			function setProgress(current, total) {
 				if (!total || total <= 0) {
 					shell.classList.add("is-indeterminate");
@@ -320,6 +343,14 @@
 				status.textContent = "Boot failed";
 				percent.textContent = "!";
 				errorBox.textContent = message;
+			}
+
+			if (await clearLegacyWebCache()) {
+				sessionStorage.setItem("factos_sw_refresh_done", "1");
+				status.textContent = "Refreshing cache";
+				percent.textContent = "0%";
+				location.reload();
+				return;
 			}
 
 			const missing = Engine.getMissingFeatures({
