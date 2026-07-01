@@ -614,7 +614,8 @@ func is_settings_button_press(event: InputEvent) -> bool:
 	var pos = settings_press_position(event)
 	if pos.x < 0.0:
 		return false
-	return settings_button_touch_rect().has_point(pos) or settings_hud_touch_rect().has_point(pos) or settings_viewport_corner_hit(pos)
+	var game_pos = viewport_to_game_pos(pos)
+	return settings_button_touch_rect().has_point(game_pos) or settings_hud_touch_rect().has_point(game_pos) or settings_viewport_corner_hit(pos)
 
 
 func settings_press_position(event: InputEvent) -> Vector2:
