@@ -4,3 +4,5 @@ AGENTS.md
 assets
 screenshots
 .godot
+bin/
+obj/
