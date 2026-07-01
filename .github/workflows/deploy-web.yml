@@ -54,6 +54,13 @@ jobs:
           touch build/.nojekyll
           du -h build/index.pck build/index.wasm
 
+      - name: Pre-compress with Brotli
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq brotli
+          brotli -q 11 -f build/index.wasm -o build/index.wasm.br
+          brotli -q 11 -f build/index.pck -o build/index.pck.br
+          ls -lh build/index.wasm.br build/index.pck.br
+
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
